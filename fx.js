@@ -1,76 +1,10 @@
-// Everything that's only there to look good: day/night, background lines, spotlight, confetti.
+// Everything that's only there to feel good: confetti and a little vibration.
 
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* ---------- day / night (same switch + circle reveal as the bot's mini app) ---------- */
-
-const THEME_KEY = 'hevre:theme';
-const isDark = () => {
-  const t = document.documentElement.dataset.theme;
-  return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-};
-const paintBar = () => {
-  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bg);
-};
-
-function switchTheme(mode) {
-  const apply = () => { document.documentElement.dataset.theme = mode; paintBar(); };
-  if (reduce || !document.startViewTransition) return apply();
-  // The new theme grows out of wherever the sun/moon lands.
-  const c = document.querySelector('.theme-switch__container').getBoundingClientRect();
-  const x = mode === 'dark' ? c.right - c.height / 2 : c.left + c.height / 2;
-  const y = c.top + c.height / 2;
-  const r = Math.ceil(Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y)));
-  const t = document.startViewTransition(apply);
-  t.ready.then(() => {
-    document.documentElement.animate(
-      { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
-      { duration: 650, easing: 'cubic-bezier(.22,.61,.36,1)', pseudoElement: '::view-transition-new(root)' },
-    );
-  }, () => {});
-}
-
-const box = document.getElementById('theme-toggle');
-box.checked = isDark(); // checked = night, matching the artwork
-paintBar();
-box.addEventListener('change', () => {
-  const mode = box.checked ? 'dark' : 'light';
-  switchTheme(mode);
-  try { localStorage.setItem(THEME_KEY, mode); } catch {}
-});
-
-/* ---------- background paths (Kokonut UI, via 21st.dev) ---------- */
-
-function fan(position) {
-  const NS = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('viewBox', '-200 -200 1100 900');
-  svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
-  for (let i = 0; i < 36; i++) {
-    const p = document.createElementNS(NS, 'path');
-    const a = i * 5 * position, b = i * 6;
-    p.setAttribute('d', `M-${380 - a} -${189 + b}C-${380 - a} -${189 + b} -${312 - a} ${216 - b} ${152 - a} ${343 - b}C${616 - a} ${470 - b} ${684 - a} ${875 - b} ${684 - a} ${875 - b}`);
-    p.setAttribute('pathLength', '1');
-    p.setAttribute('stroke-width', (0.5 + i * 0.03).toFixed(2));
-    p.setAttribute('stroke-opacity', (0.06 + i * 0.012).toFixed(3));
-    p.style.setProperty('--d', (20 + Math.random() * 10).toFixed(1) + 's');
-    p.style.animationDelay = (-Math.random() * 30).toFixed(1) + 's';
-    svg.append(p);
-  }
-  return svg;
-}
-document.querySelector('.bgpaths').append(fan(1), fan(-1));
-
-/* ---------- spotlight on glass panels ---------- */
-
-addEventListener('pointermove', e => {
-  const p = e.target.closest?.('.panel');
-  if (!p) return;
-  const r = p.getBoundingClientRect();
-  p.style.setProperty('--mx', e.clientX - r.left + 'px');
-  p.style.setProperty('--my', e.clientY - r.top + 'px');
-}, { passive: true });
+// The card colours: blue, violet, pink, coral, teal, sky, purple, orange. Picked by hand
+// so every card reads with white text (a raw hue wheel gives muddy yellows and greens).
+export const CARD_HUES = [228, 258, 332, 6, 168, 199, 282, 22];
 
 /* ---------- confetti ---------- */
 
@@ -83,8 +17,7 @@ export function confetti() {
   const dpr = devicePixelRatio || 1;
   cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const css = getComputedStyle(document.documentElement);
-  const colors = ['--g1', '--g2', '--g3', '--yes'].map(v => css.getPropertyValue(v).trim()).concat('#ffffff');
+  const colors = CARD_HUES.map(h => `hsl(${h} 72% 55%)`).concat('#0B0B10');
   for (let i = 0; i < 160; i++) {
     const fromLeft = i % 2 === 0;
     bits.push({

@@ -1,7 +1,7 @@
 import { store, isLive, newId, newCode } from './store.js';
 import { balances, transfers, shekels } from './split.js';
 import { packs } from './ideas.js';
-import { confetti, buzz } from './fx.js';
+import { confetti, buzz, CARD_HUES } from './fx.js';
 import { REGIONS, regionName, planFor, addMin } from './plan-data.js';
 import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js';
 
@@ -797,8 +797,8 @@ function wheel(opts) {
 // Stable colour per card, so the same idea always glows the same.
 function hue(text) {
   let x = 0;
-  for (const ch of text) x = (x * 31 + ch.codePointAt(0)) % 360;
-  return x;
+  for (const ch of text) x = (x * 31 + ch.codePointAt(0)) % 997;
+  return CARD_HUES[x % CARD_HUES.length];
 }
 
 function addOptions(me) {

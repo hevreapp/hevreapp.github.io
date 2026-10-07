@@ -15,6 +15,7 @@ export const TASTES = [
   ['games', '🎮', 'משחקים'],
   ['animals', '🐶', 'בעלי חיים'],
   ['culture', '🎭', 'הופעות ותרבות'],
+  ['horror', '👻', 'אימה ומתח'],
   ['random', '🎲', 'דברים רנדומליים'],
 ];
 
@@ -79,7 +80,7 @@ const T = {
   'למצוא אירוע אקראי שקורה היום ולהגיע': 'random culture', 'פיקניק במקום הכי מוזר שאפשר': 'food random',
   'קיאקים': 'water sport nature money access car', 'לעלות להר לפני הזריחה': 'nature sport walk height dark late access car',
   'לשחזר תמונה ישנה שלנו מהילדות': 'creative random', 'רכבת לעיר שאף אחד לא היה בה': 'random car money walk',
-  'אבטיח שלם על החוף': 'food water chill', 'לצייר אחד את השני גרוע ככל האפשר': 'creative games chill', 'סיפורי אימה בחושך': 'dark night chill',
+  'אבטיח שלם על החוף': 'food water chill', 'לצייר אחד את השני גרוע ככל האפשר': 'creative games chill', 'סיפורי אימה בחושך': 'dark night chill horror',
   // nature
   'ים': 'water nature chill', 'מסלול הליכה': 'nature walk sport access', 'מעיין': 'nature water walk access car', 'קמפינג': 'nature night late dark car',
   'רפטינג': 'water extreme sport money car', 'גלישה': 'water extreme sport', 'שנורקלינג': 'water sport animals',
@@ -102,6 +103,20 @@ const T = {
   'סתם הליכה ודיבורים': 'chill walk', 'מגרש בשכונה': 'sport', 'פארק': 'nature chill', 'ספרייה': 'culture chill',
   'שקיעה': 'nature chill', 'סיור גרפיטי בעיר': 'culture walk creative', 'גן שעשועים בלילה': 'night random', 'לצאת עם הכלב של מישהו': 'animals walk',
   'יוגה בפארק': 'sport nature chill', 'טיול צילום': 'creative walk', 'אירוע חינמי בעירייה': 'culture loud', 'ריצה ביחד': 'sport walk access',
+  // horror
+  'חדר בריחה אימה': 'games dark horror money', 'סרט אימה בקולנוע': 'culture dark horror money', 'מרתון סרטי אימה בבית': 'horror dark chill night',
+  'מבוך אימה': 'horror dark extreme loud money', 'סיור רוחות בעיר העתיקה': 'horror night walk culture dark', 'מאפיה בחושך מוחלט': 'games dark horror chill',
+  'סיפורי אימה מסביב למדורה': 'horror nature night dark', 'טיול לילה בירח מלא': 'horror nature night dark walk', 'ציד רוחות עם פנסים בפארק': 'horror night dark games walk',
+  'מסיבת תחפושות מפחידה': 'horror creative loud night late',
+  // gaming
+  'טורניר מריו קארט': 'games chill', 'מציאות מדומה VR': 'games money', 'לאן פארטי עם לפטופים': 'games chill late', 'טורניר שחמט': 'games chill',
+  'טורניר קלפים': 'games chill', 'משחק תפקידים / D&D': 'games creative chill', 'חדר בריחה אונליין': 'games chill', 'דארטס ופינג פונג': 'games sport money',
+  // creative
+  'ציור על קנבס בפארק': 'creative nature chill', 'סדנת קרמיקה': 'creative money', 'לצלם טיקטוק מטורף ביחד': 'creative random', 'תחרות קאפקייקס': 'food creative',
+  'לכתוב שיר ולהקליט אותו': 'creative culture', 'להכין צמידים': 'creative chill', 'צילומי סטודיו מאולתרים': 'creative random', 'לערוך סרטון מהיציאה הקודמת': 'creative chill',
+  // sport
+  'אייג\'אמפ': 'sport extreme money access loud', 'פינג פונג': 'sport games', 'בולדרינג': 'sport extreme height money access', 'רולר בלייד': 'sport extreme access',
+  'בדמינטון בפארק': 'sport nature', 'אתגר 10,000 צעדים': 'sport walk access', 'משחק כדורגל 5 על 5': 'sport access', 'סאפ בים': 'water sport money access',
 };
 
 export function tagsOf(text) {
@@ -148,6 +163,15 @@ export function priceOf(text) {
 // Age: some ideas have a minimum age, others are fine but need an adult along below some age.
 // [min age, adult needed under this age, why]
 const AGE = {
+  'מבוך אימה': [12, 14, ''],
+  'חדר בריחה אימה': [10, 14, ''],
+  'סרט אימה בקולנוע': [0, 14, 'תלוי בסרט'],
+  'סיור רוחות בעיר העתיקה': [0, 14, ''],
+  'טיול לילה בירח מלא': [0, 14, ''],
+  'ציד רוחות עם פנסים בפארק': [0, 12, ''],
+  'אייג\'אמפ': [5, 0, ''],
+  'בולדרינג': [6, 12, ''],
+  'סאפ בים': [8, 14, ''],
   'מסיבה': [16, 0, ''],
   'צניחה מודרכת / רחיפה': [16, 18, 'צריך אישור הורים'],
   'הופעה / סטנדאפ': [16, 0, ''],
