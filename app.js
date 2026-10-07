@@ -1,10 +1,10 @@
-import { store, isLive, newId, newCode } from './store.js?v=20261007231656';
-import { balances, transfers, shekels } from './split.js?v=20261007231656';
-import { packs } from './ideas.js?v=20261007231656';
-import { confetti, buzz, CARD_HUES } from './fx.js?v=20261007231656';
-import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261007231656';
-import { EXPLAIN } from './explain.js?v=20261007231656';
-import { API, VAPID_KEY } from './api-config.js?v=20261007231656';
+import { store, isLive, newId, newCode } from './store.js?v=20261007233445';
+import { balances, transfers, shekels } from './split.js?v=20261007233445';
+import { packs } from './ideas.js?v=20261007233445';
+import { confetti, buzz, CARD_HUES } from './fx.js?v=20261007233445';
+import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261007233445';
+import { EXPLAIN } from './explain.js?v=20261007233445';
+import { API, VAPID_KEY } from './api-config.js?v=20261007233445';
 
 // The always-on server (AI + notifications). Fire and forget: the site works the same without it.
 async function callApi(path, body) {
@@ -16,7 +16,7 @@ async function callApi(path, body) {
     return r.ok ? r.json() : null;
   } catch { return null; }
 }
-import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261007231656';
+import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261007233445';
 
 const root = document.getElementById('app');
 // Same falsy-skipping as h(), so `cond && el` works at the top level too.
@@ -374,7 +374,7 @@ function slideTabs(el) {
 
 let setTab = () => {};
 function renderGroup(me) {
-  setTab = t => { if (t === tab) return; tab = t; ls.set('hevre:tab', t); unsettle(); render(); };
+  setTab = t => { if (t === tab) return; if (tab === 'chat') delete chatSince[gid]; tab = t; ls.set('hevre:tab', t); unsettle(); render(); };
   const g = state.group;
   once('sync:' + gid + ':' + (userDoc?.ts || 0), !!userDoc && state.profiles?.[me]?.ts !== userDoc.ts, () => syncProfileTo(gid, me));
   const unread = tab === 'chat' ? 0 : chatUnread();
@@ -910,6 +910,21 @@ function groupLikes(text) {
   return x;
 }
 
+// The AI looks at everyone's profiles (likes, limits, ages, budget) and puts fresh ideas on the table.
+let suggesting = false;
+async function aiSuggest() {
+  if (suggesting) return;
+  suggesting = true; buzz(10);
+  toast('🤖 חושב על רעיונות בשבילכם...');
+  const r = await callApi('/suggest', { gid });
+  suggesting = false;
+  if (!r) return toast('לא הצלחתי, תנסו שוב עוד רגע');
+  if (r.full) return toast('השולחן כבר מלא');
+  if (r.capped) return toast('הגעתם ל-100 שימושים ב-AI להיום');
+  if (r.error) return toast(r.error);
+  toast(r.added ? `🤖 הוספתי ${r.added} רעיונות` : 'לא מצאתי רעיונות חדשים, תנסו שוב');
+}
+
 function addOptions(me) {
   const have = new Set(state.options.map(o => o.text));
   const deckSize = state.info?.deck || 15;
@@ -959,6 +974,7 @@ function addOptions(me) {
     ),
     h('p', { class: 'muted small', style: 'margin:8px 0 12px' }, `${state.options.length}/${deckSize} על השולחן. בכל חבילה נכנסים קודם הקלפים שהכי מתאימים לחבר'ה`),
     h('div', { class: 'chips' },
+      API && isLive && h('button', { class: 'chip ai', onclick: aiSuggest }, '🤖 תציע לנו'),
       h('button', { class: 'chip on', onclick: () => addMany(all) }, '🎲 הפתעה'),
       state.mycards?.length > 0 && h('button', { class: 'chip ours', onclick: () => addMany(state.mycards.map(c => [c.emoji, c.text])) },
         `⭐ שלנו (${state.mycards.length})`),
@@ -1297,8 +1313,11 @@ function bootPush() {
 /* ---------- the chat tab: our chat, or the AI everyone can see ---------- */
 
 let chatMode = 'people';
+const chatSince = {}; // per group: what was already read when you opened the chat, so "what did I miss" knows
 function chatArea(me) {
   bootPush();
+  if (!(gid in chatSince)) chatSince[gid] = ls.get(readKey(), 0);
+  const missed = (state.chat || []).filter(m => m.ts > chatSince[gid] && m.uid !== user.uid).length;
   const on = ls.get(pushKey(), false);
   return h('div', null,
     h('div', { class: 'seg chatseg' },
@@ -1306,8 +1325,26 @@ function chatArea(me) {
       h('button', { class: chatMode === 'ai' ? 'on' : '', onclick: () => { chatMode = 'ai'; render(); } }, '🤖 שאל את ה-AI'),
     ),
     isLive && !on && h('button', { class: 'pushnudge', onclick: turnOnPush }, '🔔 תדליק התראות כדי לדעת כשכותבים בקבוצה'),
+    chatMode === 'people' && API && isLive && (state.chat || []).length >= 5 && h('button', { class: 'missbtn', onclick: () => aiSummary(chatSince[gid]) },
+      missed >= 5 ? `🤖 מה פספסתי? (${missed} הודעות חדשות)` : "🤖 תסכם לי את הצ'אט"),
     chatMode === 'ai' ? aiTab(me) : chatTab(me),
   );
+}
+
+async function aiSummary(since) {
+  buzz(10);
+  const body = h('p', { class: 'summary' }, "🤖 קורא את הצ'אט...");
+  const close = () => { el.classList.add('out'); setTimeout(() => el.remove(), 300); };
+  const el = h('div', { class: 'matchscreen', role: 'dialog', 'aria-label': "סיכום הצ'אט" },
+    h('div', { class: 'ms-inner sheet' },
+      h('h3', { style: 'margin:0 0 10px' }, '🤖 מה פספסת'),
+      body,
+      h('button', { class: 'btn wide', onclick: close }, 'סבבה'),
+    ));
+  el.onclick = e => { if (e.target === el) close(); };
+  document.body.append(el);
+  const r = await callApi('/summary', { gid, since });
+  body.textContent = r?.text || 'לא הצלחתי לסכם, תנסו שוב עוד רגע';
 }
 
 let aiView = null, aiReply = null; // aiReply: {id, from} when answering someone's question yourself

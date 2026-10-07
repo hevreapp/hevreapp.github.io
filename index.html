@@ -929,6 +929,11 @@
   .replybar:empty { display: none; }
   .chat.ai .chatbar { border-top: 1px solid var(--line); }
 
+  .chip.ai { background: var(--accent-soft); border-color: transparent; color: var(--accent); font-weight: 700; }
+  .missbtn { display: block; width: 100%; margin-bottom: 10px; padding: 10px 14px; border-radius: 14px; font-weight: 700; font-size: 14px;
+    background: var(--surface); border: 1px solid var(--line); color: var(--ink); }
+  .summary { white-space: pre-wrap; text-align: start; font-size: 16px; line-height: 1.6; margin: 0 0 14px; padding: 14px; border-radius: 16px; background: var(--soft); }
+
   /* night versions of the clean theme's fixed whites and blacks */
   :root[data-theme="dark"] :is(.panel, .glassbtn, .chip, .banner, .card.behind, .stamp, .vote button, .who span, .locked,
     .gcard, .seat.in, .startbar, .chat, .chatbar, .pollcomp, .tabs .ind, .bitem.taken) { background: var(--surface); }
@@ -980,6 +985,6 @@
 <div id="app"></div>
 <canvas id="confetti"></canvas>
 <div class="toast" id="toast"></div>
-<script type="module" src="app.js?v=20261007231656"></script>
+<script type="module" src="app.js?v=20261007233445"></script>
 </body>
 </html>

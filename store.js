@@ -26,7 +26,7 @@
 //
 // A group watcher gets: {group, round, here, profiles, hidden, options, votes, when, chat, expenses, settlements, budget, kitty, info, plan, bring, rides, mycards, pollvotes, reacts, aichat}
 
-import { firebaseConfig } from './firebase-config.js?v=20261007231656';
+import { firebaseConfig } from './firebase-config.js?v=20261007233445';
 
 export const isLive = !!(firebaseConfig && firebaseConfig.projectId);
 
