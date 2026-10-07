@@ -4,6 +4,18 @@ import { packs } from './ideas.js';
 import { confetti, buzz, CARD_HUES } from './fx.js';
 import { REGIONS, regionName, planFor, addMin } from './plan-data.js';
 import { EXPLAIN } from './explain.js';
+import { API, VAPID_KEY } from './api-config.js';
+
+// The always-on server (AI + notifications). Fire and forget: the site works the same without it.
+async function callApi(path, body) {
+  if (!API || !isLive) return null;
+  try {
+    const token = await store.idToken();
+    if (!token) return null;
+    const r = await fetch(API + path, { method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    return r.ok ? r.json() : null;
+  } catch { return null; }
+}
 import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js';
 
 const root = document.getElementById('app');
@@ -267,6 +279,7 @@ function renderHome() {
     h('div', { class: 'homebar' },
       h('span', { class: 'av', style: `--h:${hue(myName())}` }, [...myName()][0]),
       h('div', { style: 'flex:1' }, h('b', null, 'היי ' + myName()), h('div', { class: 'muted small', style: 'margin:0' }, 'הקבוצות שלך')),
+      isLive && pushButton(),
       h('button', { class: 'linkbtn', style: 'margin:0', onclick: () => store.signOut() }, isLive ? 'יציאה' : 'החלף משתמש'),
     ),
     !isLive && h('div', { class: 'banner' }, 'מצב בדיקה: הכל נשמר רק בדפדפן הזה'),
@@ -365,7 +378,7 @@ function renderGroup(me) {
   const g = state.group;
   once('sync:' + gid + ':' + (userDoc?.ts || 0), !!userDoc && state.profiles?.[me]?.ts !== userDoc.ts, () => syncProfileTo(gid, me));
   const unread = tab === 'chat' ? 0 : chatUnread();
-  const content = tab === 'money' ? moneyTab(me) : tab === 'people' ? peopleTab(me) : tab === 'chat' ? chatTab(me) : decideTab(me);
+  const content = tab === 'money' ? moneyTab(me) : tab === 'people' ? peopleTab(me) : tab === 'chat' ? chatArea(me) : decideTab(me);
   app.replaceChildren(
     h('div', { class: 'top' },
       h('a', { class: 'glassbtn', href: '#', title: 'הקבוצות שלי', 'aria-label': 'הקבוצות שלי' }, '→'),
@@ -388,7 +401,7 @@ function renderGroup(me) {
     )),
     content,
   );
-  if (tab === 'chat') chatAfterRender();
+  if (tab === 'chat') chatMode === 'ai' ? aiAfterRender() : chatAfterRender();
   once('onboard:' + user.uid, !ls.get('hevre:onboarded:' + user.uid, false), showOnboarding);
 }
 
@@ -526,6 +539,7 @@ function lobby(me) {
     buzz(30);
     const deadline = timer ? Date.now() + timer * 60000 : 0;
     await store.setRound(gid, { status: 'live', startedBy: me, ts: Date.now(), deadline });
+    callApi('/notify', { gid, type: 'round' });
   };
 
   const myProf = profileOf(me);
@@ -1159,7 +1173,9 @@ function chatTab(me) {
       if (!text) return;
       input.value = ''; input.style.height = '';
       buzz(8);
-      await store.sendChat(gid, { id: newId(12), uid: user.uid, from: state.group.people[user.uid], text, ts: Date.now() });
+      const id = newId(12);
+      await store.sendChat(gid, { id, uid: user.uid, from: state.group.people[user.uid], text, ts: Date.now() });
+      callApi('/notify', { gid, type: 'chat', id });
     };
     send.onclick = go;
     input.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go(); } };
@@ -1202,6 +1218,126 @@ function chatAfterRender() {
   const last = (state.chat || []).at(-1);
   if (last) ls.set(readKey(), last.ts);
 }
+
+
+/* ---------- notifications ---------- */
+
+const pushKey = () => 'hevre:push:' + user.uid;
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+
+async function turnOnPush() {
+  if (isIOS && !standalone) return toast('באייפון: קודם "הוסף למסך הבית" מתפריט השיתוף, ואז מהאייקון');
+  if (!('Notification' in window)) return toast('הדפדפן הזה לא תומך בהתראות');
+  if (Notification.permission === 'denied') return toast('חסמת התראות לאתר. אפשר להחזיר בהגדרות האתר בדפדפן');
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') return;
+  try {
+    if (await store.enablePush(user.uid, VAPID_KEY)) { ls.set(pushKey(), true); toast('🔔 התראות פועלות'); rerender(); }
+    else toast('הדפדפן הזה לא תומך בהתראות');
+  } catch { toast('משהו נתקע, תנסה שוב'); }
+}
+function pushButton() {
+  const on = ls.get(pushKey(), false) && 'Notification' in window && Notification.permission === 'granted';
+  return h('button', { class: 'pushbtn' + (on ? ' on' : ''), onclick: on ? () => toast('🔔 ההתראות כבר פועלות בטלפון הזה') : turnOnPush, 'aria-label': 'התראות' },
+    on ? '🔔' : '🔕');
+}
+// keep this phone's token fresh, and show a small toast for other groups while the site is open
+let pushBooted = false;
+function bootPush() {
+  if (pushBooted || !isLive || !user) return;
+  pushBooted = true;
+  if (ls.get(pushKey(), false) && 'Notification' in window && Notification.permission === 'granted') store.enablePush(user.uid, VAPID_KEY).catch(() => {});
+  store.onForegroundPush(d => { if (!(gid && d.link?.endsWith('#g=' + gid))) toast(d.body || 'הודעה חדשה'); });
+}
+
+/* ---------- the chat tab: our chat, or the AI everyone can see ---------- */
+
+let chatMode = 'people';
+function chatArea(me) {
+  bootPush();
+  const on = ls.get(pushKey(), false);
+  return h('div', null,
+    h('div', { class: 'seg chatseg' },
+      h('button', { class: chatMode === 'people' ? 'on' : '', onclick: () => { chatMode = 'people'; render(); } }, '💬 החבר\'ה'),
+      h('button', { class: chatMode === 'ai' ? 'on' : '', onclick: () => { chatMode = 'ai'; render(); } }, '🤖 שאל את ה-AI'),
+    ),
+    isLive && !on && h('button', { class: 'pushnudge', onclick: turnOnPush }, '🔔 תדליק התראות כדי לדעת כשכותבים בקבוצה'),
+    chatMode === 'ai' ? aiTab(me) : chatTab(me),
+  );
+}
+
+let aiView = null, aiReply = null; // aiReply: {id, from} when answering someone's question yourself
+function aiTab(me) {
+  if (!aiView || aiView.gid !== gid) {
+    const list = h('div', { class: 'chatlist', role: 'log', 'aria-live': 'polite' });
+    const replyBar = h('div', { class: 'replybar' });
+    const input = h('textarea', { class: 'chatin', rows: 1, maxlength: CHAT_LEN, placeholder: 'תשאל משהו, כולם רואים...' });
+    const send = h('button', { class: 'chatsend', 'aria-label': 'שלח' }, '➤');
+    const go = async () => {
+      const text = input.value.trim().slice(0, CHAT_LEN);
+      if (!text) return;
+      input.value = ''; input.style.height = '';
+      buzz(8);
+      const id = newId(12), from = state.group.people[user.uid];
+      if (aiReply) {
+        await store.sendAI(gid, { id, uid: user.uid, from, kind: 'a', replyTo: aiReply.id, text, ts: Date.now() });
+        aiReply = null; drawReply();
+        callApi('/notify', { gid, type: 'aiq', id });
+      } else {
+        await store.sendAI(gid, { id, uid: user.uid, from, kind: 'q', text, ts: Date.now() });
+        callApi('/ai', { gid, id });
+        callApi('/notify', { gid, type: 'aiq', id });
+      }
+    };
+    const drawReply = () => replyBar.replaceChildren(...(aiReply ? [
+      h('span', null, `↩️ עונה ל${aiReply.from}`),
+      h('button', { class: 'x', onclick: () => { aiReply = null; drawReply(); input.placeholder = 'תשאל משהו, כולם רואים...'; } }, '×'),
+    ] : []));
+    send.onclick = go;
+    input.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go(); } };
+    input.oninput = () => { input.style.height = ''; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; };
+    aiView = { gid, list, input, drawReply, count: -1,
+      wrap: h('div', { class: 'chat ai' }, list, replyBar, h('div', { class: 'chatbar' }, input, send)) };
+  }
+  const { list } = aiView;
+  const msgs = state.aichat || [];
+  const answered = new Set(msgs.filter(m => m.kind === 'ai').map(m => m.replyTo));
+  const lastQ = [...msgs].reverse().find(m => m.kind === 'q');
+  const thinking = lastQ && !answered.has(lastQ.id) && Date.now() - lastQ.ts < 60000 && !!API && isLive;
+  const sig = msgs.length + '|' + thinking;
+  if (sig !== aiView.count) {
+    const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80 || aiView.count === -1;
+    aiView.count = sig;
+    const byId = Object.fromEntries(msgs.map(m => [m.id, m]));
+    const items = [h('div', { class: 'aihello' },
+      h('b', null, '🤖 ה-AI של הקבוצה'),
+      h('span', null, 'אפשר לשאול אותו על יציאות, מחירים בערך, מה להביא, חוקים של משחקים... כל החבר\'ה רואים את השאלות והתשובות ויכולים לענות גם'),
+      (!API || !isLive) && h('small', null, 'ה-AI יופעל אחרי שנחבר את השרת'),
+    )];
+    for (const m of msgs) {
+      const mine = m.uid === user.uid;
+      const ai = m.kind === 'ai';
+      const to = m.replyTo && byId[m.replyTo];
+      items.push(h('div', { class: 'msg' + (mine ? ' mine' : '') + (ai ? ' aimsg' : '') },
+        h('span', { class: 'from', style: ai || mine ? '' : `color:hsl(${hue(m.from)} 70% 50%)` }, ai ? '🤖 AI' : mine ? 'אני' : m.from,
+          to && !ai ? ` ↩️ ל${to.uid === user.uid ? 'שאלה שלי' : to.from}` : ''),
+        h('span', { class: 'txt' }, m.text),
+        h('span', { class: 'time' }, hhmm(m.ts)),
+        m.kind === 'q' && !mine && h('button', {
+          class: 'answerbtn', onclick: () => { aiReply = { id: m.id, from: m.from }; aiView.drawReply(); aiView.input.placeholder = 'התשובה שלך...'; aiView.input.focus(); },
+        }, '↩️ לענות'),
+      ));
+    }
+    if (thinking) items.push(h('div', { class: 'msg aimsg typing' }, h('span', { class: 'from' }, '🤖 AI'), h('span', { class: 'dots' }, h('i'), h('i'), h('i'))));
+    list.replaceChildren(...items);
+    aiView.stick = nearBottom;
+    // the "thinking" bubble gives up after a minute even if no update arrives
+    if (thinking) setTimeout(() => { if (tab === 'chat' && chatMode === 'ai') render(); }, 60500 - (Date.now() - lastQ.ts));
+  }
+  return aiView.wrap;
+}
+function aiAfterRender() { if (aiView?.stick) aiView.list.scrollTop = aiView.list.scrollHeight; }
 
 /* ---------- when? ---------- */
 // After the group picked what to do: everyone taps the days they can, the best day lights up.
@@ -1377,7 +1513,9 @@ function planPanel(me, what) {
       h('button', {
         class: 'glassbtn wide',
         onclick: async () => {
-          await store.sendChat(gid, { id: newId(12), uid: user.uid, from: me, text: planText().slice(0, 500), ts: Date.now() });
+          const id = newId(12);
+          await store.sendChat(gid, { id, uid: user.uid, from: me, text: planText().slice(0, 500), ts: Date.now() });
+          callApi('/notify', { gid, type: 'chat', id });
           toast('נשלח לצ\'אט 💬');
         },
       }, '💬 שלח את התוכנית לצ\'אט'),
@@ -1532,7 +1670,9 @@ function pollComposer(close) {
     if (!question) return toast('מה השאלה?');
     if (answers.length < 2) return toast('צריך לפחות 2 תשובות');
     const from = state.group.people[user.uid];
-    await store.sendChat(gid, { id: newId(12), uid: user.uid, from, kind: 'poll', q: question, opts: answers, text: '📊 ' + question, ts: Date.now() });
+    const id = newId(12);
+    await store.sendChat(gid, { id, uid: user.uid, from, kind: 'poll', q: question, opts: answers, text: '📊 ' + question, ts: Date.now() });
+    callApi('/notify', { gid, type: 'chat', id });
     q.value = ''; opts.forEach(o => { o.value = ''; });
     close();
   };

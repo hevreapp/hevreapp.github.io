@@ -21,6 +21,14 @@ service cloud.firestore {
                 && (!('born' in request.resource.data) || request.resource.data.born.matches('^[12][0-9]{3}-[01][0-9]-[0-3][0-9]$'))));
     }
 
+    // users/{uid}/push/{token}: the phones that get this user's notifications. Only the user touches them;
+    // the server reads them with admin access.
+    match /users/{uid}/push/{token} {
+      allow read, delete: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['token', 'ts']) && request.resource.data.token == token;
+    }
+
     // codes/{CODE}: {gid}. Anyone signed in may look a code up, only the group's creator makes it.
     match /codes/{code} {
       allow get: if signedIn();
@@ -111,6 +119,20 @@ service cloud.firestore {
         allow delete: if member();
         allow update: if false;
       }
+      // the AI chat: members ask ('q') and answer each other ('a'); only the server writes the AI's answers
+      match /aichat/{id} {
+        allow read: if member();
+        allow create: if member()
+          && request.resource.data.keys().hasOnly(['id', 'uid', 'from', 'kind', 'replyTo', 'text', 'ts'])
+          && request.resource.data.id == id
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.from == myName()
+          && request.resource.data.kind in ['q', 'a']
+          && shortStr(request.resource.data.text, 500)
+          && okTs(request.resource.data.ts);
+        allow update, delete: if false;
+      }
+
       // a chat reaction: doc id is "<message id>__<my name>", one per person per message
       match /reacts/{id} {
         allow read, delete: if member();

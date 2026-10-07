@@ -1,0 +1,16 @@
+{
+  "name": "חבר'ה",
+  "short_name": "חבר'ה",
+  "description": "מחליטים מה עושים ומי חייב למי בלי לריב בקבוצה",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F4F4F7",
+  "theme_color": "#3D5AFE",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

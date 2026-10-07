@@ -20,9 +20,11 @@
 //   mycards/{id}       {emoji, text, by}    the group's own ideas, kept between rounds
 //   pollvotes/{poll__name}  {poll, opt}     answers to chat polls
 //   reacts/{msg__name} {msg, e}             emoji reactions on chat messages
+//   aichat/{id}        {uid, from, kind: 'q'|'a'|'ai', text, replyTo}   the group's AI chat (the server writes 'ai')
+// users/{uid}/push/{token}  {token}         phones that get notifications
 //   votes values: 0 no, 1 yes, 2 super like, -1 veto
 //
-// A group watcher gets: {group, round, here, profiles, hidden, options, votes, when, chat, expenses, settlements, budget, kitty, info, plan, bring, rides, mycards, pollvotes, reacts}
+// A group watcher gets: {group, round, here, profiles, hidden, options, votes, when, chat, expenses, settlements, budget, kitty, info, plan, bring, rides, mycards, pollvotes, reacts, aichat}
 
 import { firebaseConfig } from './firebase-config.js';
 
@@ -31,7 +33,7 @@ export const isLive = !!(firebaseConfig && firebaseConfig.projectId);
 const empty = () => ({
   group: null, round: null, here: {}, profiles: {}, hidden: [], options: [], votes: {},
   when: {}, chat: [], expenses: [], settlements: [], budget: null, kitty: [], info: null, plan: null,
-  bring: {}, rides: {}, mycards: [], pollvotes: {}, reacts: {},
+  bring: {}, rides: {}, mycards: [], pollvotes: {}, reacts: {}, aichat: [],
 });
 
 export function newId(len = 16) {
@@ -150,6 +152,10 @@ function localStore() {
       });
     },
     async unvote(gid, member, optId) { write(gid, s => { if (Object.hasOwn(s.votes, member)) delete s.votes[member][optId]; }); },
+    async sendAI(gid, msg) { write(gid, s => { s.aichat.push(msg); s.aichat = s.aichat.slice(-CHAT_MAX); }); },
+    async enablePush() { return false; },
+    async idToken() { return null; },
+    onForegroundPush() {},
     async react(gid, msg, name, e) { write(gid, s => { const k = msg + '__' + name; if (e) s.reacts[k] = { msg, e }; else delete s.reacts[k]; }); },
     async clearRound(gid) {
       write(gid, s => { s.options = []; s.votes = {}; s.here = {}; s.when = {}; s.plan = null; s.bring = {}; s.rides = {}; s.round = { status: 'lobby', owner: s.round?.owner || null, ts: Date.now() }; });
@@ -186,6 +192,8 @@ async function firebaseStore() {
   const { initializeApp } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`);
   const fs = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`);
   const fa = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`);
+  // notifications are optional: browsers without push (old iPhones, some in-app browsers) just skip them
+  const fm = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-messaging.js`).catch(() => null);
   const fapp = initializeApp(firebaseConfig);
   const db = fs.getFirestore(fapp);
   const auth = fa.getAuth(fapp);
@@ -232,7 +240,7 @@ async function firebaseStore() {
     // Everything inside first (Firestore doesn't delete sub-collections with their parent), then the code, then the group.
     async deleteGroup(gid, code) {
       const SUBS = ['round', 'here', 'profiles', 'hidden', 'options', 'votes', 'when', 'chat', 'expenses', 'settlements',
-        'budget', 'kitty', 'info', 'plan', 'bring', 'rides', 'mycards', 'pollvotes', 'reacts'];
+        'budget', 'kitty', 'info', 'plan', 'bring', 'rides', 'mycards', 'pollvotes', 'reacts', 'aichat', 'aiusage'];
       const refs = [];
       for (const name of SUBS) (await fs.getDocs(sub(gid, name))).forEach(d => refs.push(d.ref));
       for (let i = 0; i < refs.length; i += 450) {
@@ -272,6 +280,8 @@ async function firebaseStore() {
         fs.onSnapshot(sub(gid, 'bring'), q => { s.bring = Object.fromEntries(q.docs.map(d => [d.id, d.data()])); push(); }, () => {}),
         fs.onSnapshot(sub(gid, 'rides'), q => { s.rides = Object.fromEntries(q.docs.map(d => [d.id, d.data()])); push(); }, () => {}),
         fs.onSnapshot(sub(gid, 'mycards'), q => { s.mycards = q.docs.map(d => d.data()).sort(byTs); push(); }, () => {}),
+        fs.onSnapshot(fs.query(sub(gid, 'aichat'), fs.orderBy('ts', 'desc'), fs.limit(CHAT_MAX)),
+          q => { s.aichat = q.docs.map(d => ({ ...d.data(), id: d.id })).reverse(); push(); }, () => {}),
         fs.onSnapshot(sub(gid, 'reacts'), q => { s.reacts = Object.fromEntries(q.docs.map(d => [d.id, d.data()])); push(); }, () => {}),
         fs.onSnapshot(sub(gid, 'pollvotes'), q => { s.pollvotes = Object.fromEntries(q.docs.map(d => [d.id, d.data()])); push(); }, () => {}),
         fs.onSnapshot(sub(gid, 'kitty'), q => { s.kitty = q.docs.map(d => d.data()).sort(byTs); push(); }, () => {}),
@@ -281,6 +291,17 @@ async function firebaseStore() {
       return () => unsubs.forEach(u => u());
     },
     addOption: (gid, o) => fs.setDoc(fs.doc(sub(gid, 'options'), o.id), o),
+    sendAI: (gid, msg) => fs.setDoc(fs.doc(sub(gid, 'aichat'), msg.id), msg),
+    idToken: () => auth.currentUser?.getIdToken() ?? null,
+    async enablePush(uid, vapidKey) {
+      if (!fm || !(await fm.isSupported().catch(() => false))) return false;
+      const reg = await navigator.serviceWorker.register('firebase-messaging-sw.js');
+      const token = await fm.getToken(fm.getMessaging(fapp), { vapidKey, serviceWorkerRegistration: reg });
+      if (!token) return false;
+      await fs.setDoc(fs.doc(db, 'users', uid, 'push', token), { token, ts: Date.now() });
+      return true;
+    },
+    onForegroundPush(cb) { if (fm) fm.isSupported().then(ok => ok && fm.onMessage(fm.getMessaging(fapp), m => cb(m.data || {}))).catch(() => {}); },
     unvote: (gid, member, optId) => fs.setDoc(fs.doc(sub(gid, 'votes'), member), { [optId]: fs.deleteField() }, { merge: true }),
     react: (gid, msg, name, e) => e
       ? fs.setDoc(fs.doc(sub(gid, 'reacts'), msg + '__' + name), { msg, e, ts: Date.now() })

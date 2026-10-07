@@ -12,6 +12,10 @@
 <meta name="color-scheme" content="light dark">
 <meta name="darkreader-lock">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤙</text></svg>">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="חבר'ה">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800;900&display=swap" rel="stylesheet">
@@ -905,6 +909,25 @@
   .reactpick button { font-size: 22px; padding: 2px 4px; border-radius: 10px; transition: transform .15s var(--spring); }
   .reactpick button:hover { transform: scale(1.25); }
   .reactpick button.on { background: var(--accent-soft); }
+
+  /* ================= AI CHAT + NOTIFICATIONS ================= */
+  .chatseg { margin-bottom: 10px; }
+  .pushbtn { width: 38px; height: 38px; border-radius: 12px; font-size: 18px; background: var(--surface); border: 1px solid var(--line); }
+  .pushbtn.on { border-color: var(--accent); }
+  .pushnudge { display: block; width: 100%; margin-bottom: 10px; padding: 10px 14px; border-radius: 14px; font-weight: 700; font-size: 14px;
+    background: var(--accent-soft); color: var(--accent); }
+  .aihello { align-self: stretch; display: grid; gap: 4px; text-align: center; padding: 14px; margin-bottom: 8px; border-radius: 18px; background: var(--accent-soft); }
+  .aihello b { font-size: 16px; color: var(--ink); }
+  .aihello span { font-size: 13px; color: var(--muted); }
+  .aihello small { font-size: 12px; font-weight: 700; color: var(--accent); }
+  .msg.aimsg { background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); }
+  .msg.aimsg .from { color: var(--accent); }
+  .msg.mine .from { color: rgba(255, 255, 255, .85); }
+  .answerbtn { display: block; margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--accent); padding: 0; }
+  .typing .dots { display: inline-flex; gap: 4px; padding: 6px 0; }
+  .replybar { display: flex; align-items: center; justify-content: space-between; padding: 0 14px; font-size: 13px; font-weight: 700; color: var(--accent); background: var(--surface); }
+  .replybar:empty { display: none; }
+  .chat.ai .chatbar { border-top: 1px solid var(--line); }
 
   /* night versions of the clean theme's fixed whites and blacks */
   :root[data-theme="dark"] :is(.panel, .glassbtn, .chip, .banner, .card.behind, .stamp, .vote button, .who span, .locked,
