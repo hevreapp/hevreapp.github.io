@@ -1,10 +1,10 @@
-import { store, isLive, newId, newCode } from './store.js?v=20261007231337';
-import { balances, transfers, shekels } from './split.js?v=20261007231337';
-import { packs } from './ideas.js?v=20261007231337';
-import { confetti, buzz, CARD_HUES } from './fx.js?v=20261007231337';
-import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261007231337';
-import { EXPLAIN } from './explain.js?v=20261007231337';
-import { API, VAPID_KEY } from './api-config.js?v=20261007231337';
+import { store, isLive, newId, newCode } from './store.js?v=20261007231656';
+import { balances, transfers, shekels } from './split.js?v=20261007231656';
+import { packs } from './ideas.js?v=20261007231656';
+import { confetti, buzz, CARD_HUES } from './fx.js?v=20261007231656';
+import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261007231656';
+import { EXPLAIN } from './explain.js?v=20261007231656';
+import { API, VAPID_KEY } from './api-config.js?v=20261007231656';
 
 // The always-on server (AI + notifications). Fire and forget: the site works the same without it.
 async function callApi(path, body) {
@@ -16,7 +16,7 @@ async function callApi(path, body) {
     return r.ok ? r.json() : null;
   } catch { return null; }
 }
-import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261007231337';
+import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261007231656';
 
 const root = document.getElementById('app');
 // Same falsy-skipping as h(), so `cond && el` works at the top level too.
@@ -1253,7 +1253,7 @@ function pushMenu() {
     h('div', { class: 'ms-inner sheet' },
       h('div', { style: 'font-size:44px' }, '🔔'),
       h('h3', { style: 'margin:6px 0 4px' }, 'ההתראות דלוקות בטלפון הזה'),
-      h('p', { class: 'muted', style: 'margin:0 0 14px' }, 'הודעות בצ'אט, סיבוב שהתחיל, ותזכורות של מחר יוצאים'),
+      h('p', { class: 'muted', style: 'margin:0 0 14px' }, "הודעות בצ'אט, סיבוב שהתחיל, ותזכורות של מחר יוצאים"),
       h('button', {
         class: 'btn wide', onclick: async () => {
           close();
