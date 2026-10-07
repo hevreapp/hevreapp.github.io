@@ -1,0 +1,258 @@
+rules_version = '2';
+// Paste into Firebase console → Firestore → Rules → Publish.
+// Model: you must be signed in. A group's insides (votes, chat, profiles, money) are readable
+// only by its members. To join you need the group id (link) or its 6-letter code.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function shortStr(v, max) { return v is string && v.size() > 0 && v.size() <= max; }
+    function optStr(v, max) { return v is string && v.size() <= max; }
+    function okTs(v) { return v is int && v > 0; }
+    function money(v) { return v is int && v > 0 && v <= 10000000; } // agorot, up to 100,000₪
+
+    // users/{uid}: your name and profile. Only you read or write it.
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid
+        && (request.method == 'get' || request.method == 'delete'
+            || (request.resource.data.keys().hasOnly(['name', 'born', 'likes', 'dislikes', 'limits', 'note', 'share', 'budget', 'hidden', 'ts'])
+                && optStr(request.resource.data.get('name', ''), 30)
+                && optStr(request.resource.data.get('note', ''), 140)
+                && (!('born' in request.resource.data) || request.resource.data.born.matches('^[12][0-9]{3}-[01][0-9]-[0-3][0-9]$'))));
+    }
+
+    // codes/{CODE}: {gid}. Anyone signed in may look a code up, only the group's creator makes it.
+    match /codes/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn() && code.matches('^[A-Z0-9]{6}$')
+        // getAfter: the group is created in the same batch as its code
+        && getAfter(/databases/$(database)/documents/groups/$(request.resource.data.gid)).data.owner == request.auth.uid;
+      allow update: if false;
+      // the group's creator removes its code when deleting the group
+      allow delete: if signedIn() && get(/databases/$(database)/documents/groups/$(resource.data.gid)).data.owner == request.auth.uid;
+    }
+
+    match /groups/{gid} {
+      function grp() { return get(/databases/$(database)/documents/groups/$(gid)).data; }
+      function member() { return signedIn() && request.auth.uid in grp().memberUids; }
+      // the name this account goes by in this group
+      function myName() { return grp().people[request.auth.uid]; }
+
+      // The group card (name, member names, code) is visible to anyone signed in who has the id,
+      // so the join screen can show who's inside. Everything below it is members only.
+      allow get: if signedIn();
+      allow list: if signedIn() && request.auth.uid in resource.data.memberUids; // "my groups" query
+      allow create: if signedIn()
+        && gid.matches('^[A-Za-z0-9]{16}$')
+        && request.resource.data.keys().hasOnly(['name', 'code', 'owner', 'memberUids', 'people', 'members', 'createdAt'])
+        && shortStr(request.resource.data.name, 30)
+        && request.resource.data.code.matches('^[A-Z0-9]{6}$')
+        && request.resource.data.owner == request.auth.uid
+        && request.resource.data.memberUids == [request.auth.uid]
+        && request.resource.data.people.keys().hasOnly([request.auth.uid])
+        && request.resource.data.members.size() == 1
+        && okTs(request.resource.data.createdAt);
+      // Joining: you add only yourself, nothing else changes.
+      // Leaving: you take only yourself out (the creator deletes the group instead).
+      allow update: if signedIn() && request.auth.uid in resource.data.memberUids
+        && resource.data.owner != request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'people', 'members'])
+        && resource.data.memberUids.removeAll(request.resource.data.memberUids) == [request.auth.uid]
+        && request.resource.data.memberUids.size() == resource.data.memberUids.size() - 1
+        && !(request.auth.uid in request.resource.data.people)
+        && resource.data.members.removeAll(request.resource.data.members) == [resource.data.people[request.auth.uid]];
+      allow update: if signedIn()
+        && !(request.auth.uid in resource.data.memberUids)
+        && resource.data.memberUids.size() < 20
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'people', 'members'])
+        && request.resource.data.memberUids.removeAll(resource.data.memberUids) == [request.auth.uid]
+        && request.resource.data.people.diff(resource.data.people).affectedKeys().hasOnly([request.auth.uid])
+        && shortStr(request.resource.data.people[request.auth.uid], 34)
+        && request.resource.data.members.removeAll(resource.data.members) == [request.resource.data.people[request.auth.uid]];
+      allow delete: if signedIn() && resource.data.owner == request.auth.uid;
+
+      // The creator may clear anything inside when deleting the group.
+      match /{coll}/{doc} {
+        allow delete: if signedIn() && grp().owner == request.auth.uid;
+      }
+
+      match /round/{doc} {
+        allow read: if member();
+        allow write: if member() && doc == 'state'
+          && request.resource.data.keys().hasOnly(['status', 'owner', 'startedBy', 'ts', 'spin', 'spinTs', 'deadline'])
+          && (!('status' in request.resource.data) || request.resource.data.status in ['lobby', 'live'])
+          && (!('spin' in request.resource.data) || shortStr(request.resource.data.spin, 20));
+      }
+
+      // who brings what / who rides with whom: one doc per person, you write only yours
+      match /bring/{name} {
+        allow read, delete: if member();
+        allow create, update: if member() && name == myName()
+          && request.resource.data.keys().hasOnly(['items', 'ts'])
+          && request.resource.data.items is list && request.resource.data.items.size() <= 15;
+      }
+      match /rides/{name} {
+        allow read: if member();
+        allow delete: if member();
+        allow create, update: if member() && name == myName()
+          && request.resource.data.keys().hasOnly(['seats', 'with', 'ts'])
+          && (!('seats' in request.resource.data) || (request.resource.data.seats is int && request.resource.data.seats >= 1 && request.resource.data.seats <= 8))
+          && (!('with' in request.resource.data) || request.resource.data.with in grp().members);
+      }
+      // the group's own ideas, kept between rounds
+      match /mycards/{id} {
+        allow read: if member();
+        allow create: if member()
+          && request.resource.data.keys().hasOnly(['id', 'emoji', 'text', 'by', 'ts'])
+          && request.resource.data.id == id
+          && shortStr(request.resource.data.text, 40)
+          && request.resource.data.by == myName();
+        allow delete: if member();
+        allow update: if false;
+      }
+      // a poll answer: doc id is "<poll id>__<my name>", so one answer per person per poll
+      match /pollvotes/{id} {
+        allow read: if member();
+        allow write: if member()
+          && id == request.resource.data.poll + '__' + myName()
+          && request.resource.data.keys().hasOnly(['poll', 'opt', 'ts'])
+          && request.resource.data.opt is int && request.resource.data.opt >= 0 && request.resource.data.opt < 4;
+      }
+
+      // per-person docs are named after the person; you write only your own
+      // ("new round" clears everyone's, so delete is open to members)
+      match /here/{name} {
+        allow read, delete: if member();
+        allow create, update: if member() && name == myName();
+      }
+      match /votes/{name} {
+        allow read, delete: if member();
+        allow create, update: if member() && name == myName() && request.resource.data.size() <= 60;
+      }
+      match /when/{name} {
+        allow read, delete: if member();
+        allow create, update: if member() && name == myName()
+          && request.resource.data.keys().hasOnly(['days', 'ts'])
+          && request.resource.data.days is list && request.resource.data.days.size() <= 14;
+      }
+      match /profiles/{name} {
+        allow read: if member();
+        allow write: if member() && name == myName()
+          && request.resource.data.keys().hasOnly(['likes', 'dislikes', 'limits', 'note', 'share', 'budget', 'born', 'ts'])
+          && request.resource.data.likes.size() <= 20 && request.resource.data.dislikes.size() <= 20
+          && request.resource.data.limits.size() <= 20
+          && optStr(request.resource.data.note, 140)
+          && request.resource.data.share in ['group', 'hidden'];
+      }
+      // limits someone keeps to themselves: no name on them, so nobody can tell whose they are
+      match /hidden/{hid} {
+        allow read: if member();
+        allow write: if member() && hid.matches('^[A-Za-z0-9]{12}$')
+          && (request.method == 'delete' || (request.resource.data.keys().hasOnly(['tags', 'budget', 'born', 'ts']) && request.resource.data.tags.size() <= 20));
+      }
+
+      match /options/{id} {
+        allow read: if member();
+        allow create: if member()
+          && request.resource.data.keys().hasOnly(['id', 'emoji', 'text', 'by', 'ts'])
+          && request.resource.data.id == id
+          && shortStr(request.resource.data.text, 40)
+          && optStr(request.resource.data.emoji, 12)
+          && request.resource.data.by == myName()
+          && okTs(request.resource.data.ts);
+        allow delete: if member();
+        allow update: if false;
+      }
+
+      match /chat/{id} {
+        allow read: if member();
+        allow create: if member()
+          && request.resource.data.keys().hasOnly(['id', 'uid', 'from', 'text', 'ts', 'kind', 'q', 'opts'])
+          && (!('opts' in request.resource.data) || (request.resource.data.opts is list && request.resource.data.opts.size() <= 4))
+          && (!('q' in request.resource.data) || optStr(request.resource.data.q, 80))
+          && request.resource.data.id == id
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.from == myName()
+          && shortStr(request.resource.data.text, 500)
+          && okTs(request.resource.data.ts);
+        allow update, delete: if false;
+      }
+
+      match /expenses/{id} {
+        allow read: if member();
+        allow create: if member()
+          && request.resource.data.keys().hasOnly(['id', 'payer', 'amount', 'desc', 'cat', 'among', 'by', 'ts'])
+          && request.resource.data.id == id
+          && request.resource.data.payer in grp().members
+          && money(request.resource.data.amount)
+          && optStr(request.resource.data.desc, 40)
+          && request.resource.data.among is list
+          && request.resource.data.among.size() >= 1 && request.resource.data.among.size() <= 20
+          && request.resource.data.by == myName()
+          && okTs(request.resource.data.ts);
+        allow delete: if member();
+        allow update: if false;
+      }
+
+      // budget/state: the trip budget and the kitty amount per person
+      match /budget/{doc} {
+        allow read: if member();
+        allow write: if member() && doc == 'state'
+          && request.resource.data.keys().hasOnly(['total', 'kittyPer', 'ts'])
+          && (!('total' in request.resource.data) || (request.resource.data.total is int && request.resource.data.total >= 0 && request.resource.data.total <= 100000000))
+          && (!('kittyPer' in request.resource.data) || (request.resource.data.kittyPer is int && request.resource.data.kittyPer >= 0 && request.resource.data.kittyPer <= 10000000));
+      }
+
+      // info/state: the group's region and meeting point (a public place, not a home address)
+      match /info/{doc} {
+        allow read: if member();
+        allow write: if member() && doc == 'state'
+          && request.resource.data.keys().hasOnly(['region', 'meet', 'ts'])
+          && (!('region' in request.resource.data) || request.resource.data.region in ['', 'north', 'haifa', 'sharon', 'center', 'jerusalem', 'shfela', 'south', 'eilat'])
+          && (!('meet' in request.resource.data) || optStr(request.resource.data.meet, 40));
+      }
+
+      // plan/state: this round's outing plan
+      match /plan/{doc} {
+        allow read: if member();
+        allow write: if member() && doc == 'state'
+          && request.resource.data.keys().hasOnly(['optId', 'mode', 'travel', 'start', 'ts'])
+          && request.resource.data.mode in ['bus', 'car']
+          && request.resource.data.travel is int && request.resource.data.travel >= 0 && request.resource.data.travel <= 600
+          && request.resource.data.start.matches('^[0-2][0-9]:[0-5][0-9]$');
+        allow delete: if member();
+      }
+
+      // kitty/{id}: money in (who put in) or out (spent from the pot)
+      match /kitty/{id} {
+        allow read: if member();
+        allow create: if member()
+          && request.resource.data.keys().hasOnly(['id', 'type', 'who', 'amount', 'desc', 'cat', 'by', 'ts'])
+          && request.resource.data.id == id
+          && request.resource.data.type in ['in', 'out']
+          && (request.resource.data.type == 'out' || request.resource.data.who in grp().members)
+          && money(request.resource.data.amount)
+          && optStr(request.resource.data.desc, 40)
+          && request.resource.data.by == myName()
+          && okTs(request.resource.data.ts);
+        allow delete: if member();
+        allow update: if false;
+      }
+
+      match /settlements/{id} {
+        allow read: if member();
+        allow create: if member()
+          && request.resource.data.keys().hasOnly(['id', 'from', 'to', 'amount', 'by', 'ts'])
+          && request.resource.data.id == id
+          && request.resource.data.from in grp().members
+          && request.resource.data.to in grp().members
+          && money(request.resource.data.amount)
+          && request.resource.data.by == myName()
+          && okTs(request.resource.data.ts);
+        allow delete: if member();
+        allow update: if false;
+      }
+    }
+  }
+}
