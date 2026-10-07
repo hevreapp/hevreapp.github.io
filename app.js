@@ -61,7 +61,7 @@ function toast(msg) {
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  toastTimer = setTimeout(() => t.classList.remove('show'), msg.length > 40 ? 6000 : 2200);
 }
 
 const cleanName = s => s.replace(/[\/\\.#$\[\]]/g, '').replace(/\s+/g, ' ').trim().slice(0, 30);
@@ -1235,7 +1235,11 @@ async function turnOnPush() {
   try {
     if (await store.enablePush(user.uid, VAPID_KEY)) { ls.set(pushKey(), true); toast('🔔 התראות פועלות'); rerender(); }
     else toast('הדפדפן הזה לא תומך בהתראות');
-  } catch { toast('משהו נתקע, תנסה שוב'); }
+  } catch (e) {
+    // the exact code tells us which step failed (service worker, token, or saving it)
+    toast('לא הצליח להדליק התראות: ' + String(e?.code || e?.message || e).slice(0, 80));
+    console.error('push', e);
+  }
 }
 function pushButton() {
   const on = ls.get(pushKey(), false) && 'Notification' in window && Notification.permission === 'granted';
