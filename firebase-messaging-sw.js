@@ -13,6 +13,7 @@ firebase.initializeApp({
 });
 
 firebase.messaging().onBackgroundMessage(async payload => {
+  if (payload.notification) return; // Firebase already shows these by itself
   const d = payload.data || {};
   const open = await clients.matchAll({ type: 'window', includeUncontrolled: true });
   if (open.some(c => c.focused && d.link && c.url.endsWith(d.link.slice(d.link.indexOf('#'))))) return; // already looking at it
@@ -30,7 +31,8 @@ firebase.messaging().onBackgroundMessage(async payload => {
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const link = e.notification.data?.link || './';
+  const data = e.notification.data || {};
+  const link = data.link || data.FCM_MSG?.data?.link || data.FCM_MSG?.notification?.click_action || './';
   e.waitUntil((async () => {
     const all = await clients.matchAll({ type: 'window', includeUncontrolled: true });
     const tab = all.find(c => c.url.startsWith(self.registration.scope));
