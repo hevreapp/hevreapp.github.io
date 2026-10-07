@@ -1243,9 +1243,31 @@ async function turnOnPush() {
 }
 function pushButton() {
   const on = ls.get(pushKey(), false) && 'Notification' in window && Notification.permission === 'granted';
-  return h('button', { class: 'pushbtn' + (on ? ' on' : ''), onclick: on ? pushSelfTest : turnOnPush, 'aria-label': 'התראות' },
+  return h('button', { class: 'pushbtn' + (on ? ' on' : ''), onclick: on ? pushMenu : turnOnPush, 'aria-label': 'התראות' },
     on ? '🔔' : '🔕');
 }
+// 🔔 when on: turn off, or test
+function pushMenu() {
+  const close = () => { el.classList.add('out'); setTimeout(() => el.remove(), 300); };
+  const el = h('div', { class: 'matchscreen', role: 'dialog', 'aria-label': 'התראות' },
+    h('div', { class: 'ms-inner sheet' },
+      h('div', { style: 'font-size:44px' }, '🔔'),
+      h('h3', { style: 'margin:6px 0 4px' }, 'ההתראות דלוקות בטלפון הזה'),
+      h('p', { class: 'muted', style: 'margin:0 0 14px' }, 'הודעות בצ'אט, סיבוב שהתחיל, ותזכורות של מחר יוצאים'),
+      h('button', {
+        class: 'btn wide', onclick: async () => {
+          close();
+          try { await store.disablePush(user.uid, VAPID_KEY); } catch {}
+          ls.set(pushKey(), false); toast('🔕 ההתראות כבויות'); rerender();
+        },
+      }, '🔕 לכבות התראות'),
+      h('button', { class: 'glassbtn wide', onclick: () => { close(); pushSelfTest(); } }, '🧪 בדיקה'),
+      h('button', { class: 'linkbtn', onclick: close }, 'סגור'),
+    ));
+  el.onclick = e => { if (e.target === el) close(); };
+  document.body.append(el);
+}
+
 // Tapping 🔔 when it's on: show a notification from the phone itself (no server) and say what we see.
 // Splits "the phone won't show notifications" from "pushes don't reach the phone".
 async function pushSelfTest() {

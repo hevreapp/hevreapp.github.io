@@ -155,6 +155,7 @@ function localStore() {
     async sendAI(gid, msg) { write(gid, s => { s.aichat.push(msg); s.aichat = s.aichat.slice(-CHAT_MAX); }); },
     async enablePush() { return false; },
     async currentToken() { return null; },
+    async disablePush() {},
     async idToken() { return null; },
     onForegroundPush() {},
     async react(gid, msg, name, e) { write(gid, s => { const k = msg + '__' + name; if (e) s.reacts[k] = { msg, e }; else delete s.reacts[k]; }); },
@@ -301,6 +302,15 @@ async function firebaseStore() {
       if (!token) return false;
       await fs.setDoc(fs.doc(db, 'users', uid, 'push', token), { token, ts: Date.now() });
       return true;
+    },
+    // this phone stops getting notifications: forget its token here and at Google
+    async disablePush(uid, vapidKey) {
+      if (!fm) return;
+      const reg = await navigator.serviceWorker.getRegistration();
+      const msg = fm.getMessaging(fapp);
+      const tok = reg ? await fm.getToken(msg, { vapidKey, serviceWorkerRegistration: reg }).catch(() => null) : null;
+      if (tok) await fs.deleteDoc(fs.doc(db, 'users', uid, 'push', tok)).catch(() => {});
+      await fm.deleteToken(msg).catch(() => {});
     },
     async currentToken(vapidKey) {
       if (!fm) return null;
