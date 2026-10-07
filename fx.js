@@ -1,10 +1,47 @@
-// Everything that's only there to feel good: confetti and a little vibration.
+// Everything that's only there to feel good: day/night, confetti and a little vibration.
 
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // The card colours: blue, violet, pink, coral, teal, sky, purple, orange. Picked by hand
 // so every card reads with white text (a raw hue wheel gives muddy yellows and greens).
 export const CARD_HUES = [228, 258, 332, 6, 168, 199, 282, 22];
+
+/* ---------- day / night (same switch + circle reveal as the bot's mini app) ---------- */
+
+const THEME_KEY = 'hevre:theme';
+const paintBar = () => {
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bg);
+};
+function switchTheme(mode) {
+  const apply = () => {
+    if (mode === 'dark') document.documentElement.dataset.theme = 'dark';
+    else delete document.documentElement.dataset.theme;
+    paintBar();
+  };
+  if (reduce || !document.startViewTransition) return apply();
+  // the new theme grows out of wherever the sun or moon lands
+  const c = document.querySelector('.theme-switch__container').getBoundingClientRect();
+  const x = mode === 'dark' ? c.right - c.height / 2 : c.left + c.height / 2;
+  const y = c.top + c.height / 2;
+  const r = Math.ceil(Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y)));
+  document.startViewTransition(apply).ready.then(() => {
+    document.documentElement.animate(
+      { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
+      { duration: 650, easing: 'cubic-bezier(.22,.61,.36,1)', pseudoElement: '::view-transition-new(root)' },
+    );
+  }, () => {});
+}
+const box = document.getElementById('theme-toggle');
+if (box) {
+  box.checked = document.documentElement.dataset.theme === 'dark'; // checked = night, matching the artwork
+  paintBar();
+  box.addEventListener('change', () => {
+    const mode = box.checked ? 'dark' : 'light';
+    switchTheme(mode);
+    try { localStorage.setItem(THEME_KEY, mode); } catch {}
+  });
+}
 
 /* ---------- confetti ---------- */
 

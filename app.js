@@ -3,6 +3,7 @@ import { balances, transfers, shekels } from './split.js';
 import { packs } from './ideas.js';
 import { confetti, buzz, CARD_HUES } from './fx.js';
 import { REGIONS, regionName, planFor, addMin } from './plan-data.js';
+import { EXPLAIN } from './explain.js';
 import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js';
 
 const root = document.getElementById('app');
@@ -395,7 +396,9 @@ function renderGroup(me) {
 
 const SUPER_LIKES = 3;
 const yes = v => v === 1 || v === 2;      // 2 = super like
+const VETO = -1;                            // one per person per round: the card is out
 const score = v => (v === 2 ? 2 : v === 1 ? 1 : 0);
+let lastVote = null;                        // {gid, optId}: what "↩️ חזור" takes back
 
 // Who's playing this round: anyone who walked into the lobby or already voted.
 // A friend who never opened the link doesn't block a match.
@@ -406,13 +409,19 @@ function roundInfo() {
   // When the timer runs out, whoever voted is who played; the rest don't hold anyone up.
   const closed = roundClosed();
   const players = members.filter(m => closed ? voted(m) : here?.[m] || voted(m));
-  const doneCount = m => options.filter(o => votes[m] && o.id in votes[m]).length;
-  const finished = players.filter(m => doneCount(m) === options.length);
+  // A card drops out for whoever hasn't reached it yet once it can't win anyway:
+  // someone vetoed it, or (3+ playing) half the group already said no.
+  const vetoed = o => members.some(m => votes[m]?.[o.id] === VETO);
+  const noes = o => players.filter(m => votes[m]?.[o.id] === 0 || votes[m]?.[o.id] === VETO).length;
+  const skipped = o => vetoed(o) || (players.length >= 3 && noes(o) >= Math.ceil(players.length / 2));
+  const pendingFor = m => options.filter(o => !(votes[m] && o.id in votes[m]) && !skipped(o));
+  const doneCount = m => options.length - pendingFor(m).length;
+  const finished = players.filter(m => pendingFor(m).length === 0);
   const allDone = options.length > 0 && players.length >= 2 && (closed || finished.length === players.length);
   // a match: everyone who voted on that card said yes (after the timer, cards some skipped still count)
   const voters = o => players.filter(m => votes[m] && o.id in votes[m]);
   const matches = players.length >= 2
-    ? options.filter(o => voters(o).length >= 2 && (closed || voters(o).length === players.length) && voters(o).every(m => yes(votes[m][o.id])))
+    ? options.filter(o => !vetoed(o) && voters(o).length >= 2 && (closed || voters(o).length === players.length) && voters(o).every(m => yes(votes[m][o.id])))
     : [];
   const ranked = options
     .map(o => ({
@@ -421,12 +430,12 @@ function roundInfo() {
       likes: members.filter(m => yes(votes[m]?.[o.id])).length,
       stars: members.filter(m => votes[m]?.[o.id] === 2).length,
     }))
-    .filter(x => x.pts > 0)
+    .filter(x => x.pts > 0 && !vetoed(x.o))
     .sort((a, b) => b.pts - a.pts || b.stars - a.stars);
   // the best match first, so the match screen leads with the strongest one
   const rankOf = o => ranked.findIndex(x => x.o === o);
   matches.sort((a, b) => rankOf(a) - rankOf(b));
-  return { members, players, doneCount, finished, allDone, matches, ranked, closed };
+  return { members, players, doneCount, pendingFor, finished, allDone, matches, ranked, closed, vetoed };
 }
 
 const roundClosed = () => !!state.round?.deadline && Date.now() > state.round.deadline;
@@ -454,8 +463,49 @@ function once(key, cond, fn) {
   setTimeout(fn, 0);
 }
 
+// When a group meets every week: past the set day and hour, the next person to open the group
+// starts a fresh round seeded with what the group liked last time.
+function lastOccurrence(rep) {
+  const [hh, mm] = (rep.time || '18:00').split(':').map(Number);
+  const d = new Date(); d.setHours(hh, mm, 0, 0);
+  while (d.getDay() !== rep.day || d > new Date()) d.setDate(d.getDate() - 1);
+  return d.getTime();
+}
+async function autoNewRound(me) {
+  const liked = state.round?.status === 'live' ? roundInfo().ranked.slice(0, 8).map(x => x.o) : [];
+  const keep = liked.length ? liked : state.options.slice(0, 8);
+  await store.clearRound(gid);
+  const t = Date.now();
+  await Promise.all(keep.map((o, i) => store.addOption(gid, { id: newId(10), emoji: o.emoji || '✨', text: o.text, by: me, ts: t + i })));
+  toast('🔁 נפתח סיבוב חדש עם מה שאהבתם');
+}
+
 function decideTab(me) {
+  const rep = state.info?.repeat;
+  if (rep && rep.day >= 0 && state.round?.ts) {
+    const occ = lastOccurrence(rep);
+    // only occurrences after it was switched on, so turning it on mid-week doesn't wipe this round
+    once('repeat:' + gid + ':' + occ, occ > (rep.since || 0) && state.round.ts < occ, () => autoNewRound(me));
+  }
   return state.round?.status === 'live' ? liveRound(me) : lobby(me);
+}
+
+function repeatPanel() {
+  const rep = state.info?.repeat || { day: -1, time: '18:00' };
+  const set = patch => { buzz(8); store.setInfo(gid, { repeat: { ...rep, ...patch, since: Date.now() }, ts: Date.now() }); };
+  const days = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+  return h('div', { class: 'panel repeat' },
+    h('h3', null, '🔁 יציאה קבועה'),
+    h('div', { class: 'chips' },
+      h('button', { class: 'chip' + (rep.day < 0 ? ' on' : ''), onclick: () => set({ day: -1 }) }, 'בלי'),
+      days.map((d, i) => h('button', { class: 'chip' + (rep.day === i ? ' on' : ''), onclick: () => set({ day: i }) }, d)),
+    ),
+    rep.day >= 0 && [
+      h('div', { class: 'row', style: 'margin-top:10px' }, h('span', { class: 'muted small' }, 'בשעה'),
+        h('input', { type: 'time', class: 'timein', value: rep.time, onchange: e => set({ time: e.target.value || '18:00' }) })),
+      h('p', { class: 'muted small', style: 'margin:8px 0 0' }, `כל יום ${days[rep.day]} ב-${rep.time} נפתח לבד סיבוב חדש עם מה שאהבתם בפעם הקודמת`),
+    ],
+  );
 }
 
 /* ----- 1. lobby ----- */
@@ -507,6 +557,7 @@ function lobby(me) {
       h('button', { class: 'glassbtn wide', onclick: () => share(`פתחתי לנו קבוצה ב"חבר'ה" תכנסו`, groupUrl(gid)) }, '📤 תזמין את מי שחסר'),
     ),
     addOptions(me),
+    repeatPanel(),
     h('div', { class: 'startbar' },
       h('div', { class: 'deckcount' }, `🃏 ${options.length} קלפים על השולחן`),
       (amOwner || owner === me || !owner)
@@ -527,10 +578,9 @@ function lobby(me) {
 /* ----- live round: swipe, then results ----- */
 
 function liveRound(me) {
-  const { options, votes } = state;
-  const mine = votes[me] || {};
-  const pending = options.filter(o => !(o.id in mine));
+  const { options } = state;
   const info = roundInfo();
+  const pending = info.pendingFor(me);
   const wrap = h('div');
   const dl = state.round?.deadline;
   if (dl && !info.closed) {
@@ -541,8 +591,9 @@ function liveRound(me) {
     info.members.map(m => {
       const d = info.doneCount(m);
       const playing = info.players.includes(m);
-      return h('span', { class: d === options.length ? 'ok' : '' },
-        d === options.length ? '✓ ' + m : playing ? `${m} ${d}/${options.length}` : `${m} 💤`);
+      const fin = playing && info.pendingFor(m).length === 0;
+      return h('span', { class: fin ? 'ok' : '' },
+        fin ? '✓ ' + m : playing ? `${m} ${d}/${options.length}` : `${m} 💤`);
     }),
   ));
 
@@ -565,6 +616,7 @@ function liveRound(me) {
       h('div', { class: 'em' }, '✅'),
       h('h3', null, 'סיימת'),
       h('p', null, waitingFor.length ? 'מחכים ל' + waitingFor.join(', ') : 'מחכים לשאר החבר\'ה'),
+      undoButton(me),
     ));
   }
   wrap.append(results(me, info));
@@ -577,25 +629,41 @@ function liveRound(me) {
 
 /* ----- the deck (3. super like) ----- */
 
+// Takes back my last swipe in this round (only while that card is still in the round).
+function undoButton(me) {
+  if (!lastVote || lastVote.gid !== gid) return null;
+  const { optId } = lastVote;
+  if (!(state.votes[me] && optId in state.votes[me])) return null;
+  return h('button', {
+    class: 'undo', onclick: async () => { lastVote = null; buzz(8); await store.unvote(gid, me, optId); },
+  }, '↩️ חזור לקלף הקודם');
+}
+
 function deck(me, pending) {
   const o = pending[0];
   const total = state.options.length;
   const done = total - pending.length;
   const mine = state.votes[me] || {};
   const supersLeft = SUPER_LIKES - Object.values(mine).filter(v => v === 2).length;
-  const cast = val => store.setVote(gid, me, o.id, val);
+  const vetoLeft = 1 - Object.values(mine).filter(v => v === VETO).length;
+  const cast = val => { lastVote = { gid, optId: o.id }; return store.setVote(gid, me, o.id, val); };
 
   const yesStamp = h('div', { class: 'stamp yes' }, 'כן');
   const noStamp = h('div', { class: 'stamp no' }, 'לא');
   const superStamp = h('div', { class: 'stamp super' }, 'סופר ⭐');
+  const vetoStamp = h('div', { class: 'stamp veto' }, 'וטו 🚫');
   const price = priceOf(o.text);
+  const why = EXPLAIN[o.text];
+  const explain = why && h('div', { class: 'explain' }, why);
   const card = h('div', { class: 'card', style: `--h:${hue(o.text)}` },
-    yesStamp, noStamp, superStamp,
+    yesStamp, noStamp, superStamp, vetoStamp,
     price != null && h('div', { class: 'price', title: PRICES[price][2] }, PRICES[price][1], h('small', null, PRICES[price][2])),
+    why && h('div', { class: 'whatis' }, '❓ מה זה'),
     h('div', { class: 'em' }, o.emoji || '✨'),
     h('div', { class: 'tx' }, o.text),
     o.by && h('div', { class: 'by' }, '💡 הרעיון של ' + o.by),
     fitPills(o, me),
+    explain,
   );
   const next = pending[1] && h('div', { class: 'card behind', style: `--h:${hue(pending[1].text)}` },
     h('div', { class: 'em' }, pending[1].emoji || '✨'),
@@ -605,26 +673,31 @@ function deck(me, pending) {
   const snapBack = () => {
     card.style.transition = 'transform .25s';
     card.style.transform = '';
-    yesStamp.style.opacity = noStamp.style.opacity = superStamp.style.opacity = 0;
+    yesStamp.style.opacity = noStamp.style.opacity = superStamp.style.opacity = vetoStamp.style.opacity = 0;
   };
-  // val: 0 no, 1 yes, 2 super like
+  // val: 0 no, 1 yes, 2 super like, -1 veto
   let gone = false;
   const fly = val => {
     if (gone) return;
     if (val === 2 && supersLeft <= 0) { toast('נגמרו הסופר לייקים לסיבוב הזה'); return snapBack(); }
+    if (val === VETO && vetoLeft <= 0) { toast('כבר השתמשת בוטו בסיבוב הזה'); return snapBack(); }
     gone = true;
     card.style.transition = 'transform .32s ease-in, opacity .32s';
     card.style.transform = val === 2 ? 'translateY(-140%) scale(.9)'
+      : val === VETO ? 'translateY(140%) scale(.9)'
       : `translateX(${val ? 140 : -140}%) rotate(${val ? 24 : -24}deg)`;
     card.style.opacity = '0';
     if (val === 2) superStamp.style.opacity = 1;
+    if (val === VETO) vetoStamp.style.opacity = 1;
     buzz(val === 2 ? [15, 40, 25] : val ? 18 : 8);
     setTimeout(() => cast(val), 220);
   };
 
-  // Drag: right = yes, left = no, up = super like (like Tinder, regardless of RTL).
+  // Drag: right = yes, left = no, up = super like, down = veto (like Tinder, regardless of RTL).
+  // A tap without moving opens the explanation.
   let x0 = null, y0 = 0, dx = 0, dy = 0;
   const isUp = () => dy < -30 && Math.abs(dy) > Math.abs(dx);
+  const isDown = () => dy > 30 && Math.abs(dy) > Math.abs(dx);
   card.onpointerdown = e => {
     if (gone) return;
     x0 = e.clientX; y0 = e.clientY; dx = dy = 0; dragging = true;
@@ -634,17 +707,23 @@ function deck(me, pending) {
   card.onpointermove = e => {
     if (x0 == null) return;
     dx = e.clientX - x0; dy = e.clientY - y0;
-    card.style.transform = `translate(${dx}px, ${Math.min(dy, 0)}px) rotate(${dx / 14}deg)`;
-    yesStamp.style.opacity = isUp() ? 0 : Math.max(0, Math.min(1, dx / 90));
-    noStamp.style.opacity = isUp() ? 0 : Math.max(0, Math.min(1, -dx / 90));
+    card.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx / 14}deg)`;
+    const vertical = isUp() || isDown();
+    yesStamp.style.opacity = vertical ? 0 : Math.max(0, Math.min(1, dx / 90));
+    noStamp.style.opacity = vertical ? 0 : Math.max(0, Math.min(1, -dx / 90));
     superStamp.style.opacity = isUp() ? Math.min(1, -dy / 100) : 0;
+    vetoStamp.style.opacity = isDown() ? Math.min(1, dy / 100) : 0;
   };
   const release = () => {
     if (x0 == null) return;
     x0 = null; dragging = false;
     if (dy < -100 && isUp()) fly(2);
+    else if (dy > 100 && isDown()) fly(VETO);
     else if (Math.abs(dx) > 90) fly(dx > 0 ? 1 : 0);
-    else snapBack();
+    else {
+      snapBack();
+      if (explain && Math.abs(dx) < 6 && Math.abs(dy) < 6) card.classList.toggle('open');
+    }
     if (renderPending && !gone) { renderPending = false; render(); }
   };
   card.onpointerup = release;
@@ -656,22 +735,25 @@ function deck(me, pending) {
     h('div', { class: 'deck' }, next, card),
     h('div', { class: 'vote' },
       h('button', { class: 'no', 'aria-label': 'לא', onclick: () => fly(0) }, '✕'),
+      h('button', { class: 'veto' + (vetoLeft <= 0 ? ' out' : ''), 'aria-label': 'וטו', title: 'וטו: הקלף יוצא מהמשחק', onclick: () => fly(VETO) }, '🚫'),
       h('button', { class: 'star' + (supersLeft <= 0 ? ' out' : ''), 'aria-label': 'סופר לייק', onclick: () => fly(2) },
         '⭐', h('b', null, Math.max(0, supersLeft))),
       h('button', { class: 'yes', 'aria-label': 'כן', onclick: () => fly(1) }, '❤️'),
     ),
-    h('div', { class: 'hint' }, 'ימינה כן · שמאלה לא · למעלה סופר לייק'),
+    h('div', { class: 'hint' }, 'ימינה כן · שמאלה לא · למעלה סופר · למטה וטו'),
+    undoButton(me),
   );
 }
 
 // Arrow keys for desktop: right yes, left no, up super.
 addEventListener('keydown', e => {
   if (tab !== 'decide' || !gid || e.target.closest('input,textarea,select')) return;
-  const btns = app.querySelectorAll('.vote button');
-  if (btns.length < 3) return;
-  if (e.key === 'ArrowLeft') btns[0].click();
-  if (e.key === 'ArrowUp') btns[1].click();
-  if (e.key === 'ArrowRight') btns[2].click();
+  const btn = c => app.querySelectorAll('.vote .' + c)[0];
+  if (!btn('yes')) return;
+  if (e.key === 'ArrowLeft') btn('no').click();
+  if (e.key === 'ArrowUp') btn('star').click();
+  if (e.key === 'ArrowDown') btn('veto').click();
+  if (e.key === 'ArrowRight') btn('yes').click();
 });
 
 function results(me, info) {
@@ -801,9 +883,23 @@ function hue(text) {
   return CARD_HUES[x % CARD_HUES.length];
 }
 
+const DECKS = [10, 15, 25];
+// How much the group is into an idea, from everyone's profile: likes up, dislikes down.
+function groupLikes(text) {
+  const tags = tagsOf(text);
+  let x = 0;
+  for (const m of state.group.members) {
+    const p = profileOf(m);
+    if (p.likes.some(t => tags.includes(t))) x += 2;
+    if (p.dislikes.some(t => tags.includes(t))) x -= 2;
+  }
+  return x;
+}
+
 function addOptions(me) {
   const have = new Set(state.options.map(o => o.text));
-  const room = MAX_OPTIONS - state.options.length;
+  const deckSize = state.info?.deck || 15;
+  const room = Math.min(MAX_OPTIONS, deckSize) - state.options.length;
 
   const fitsAll = ls.get('hevre:fitsall', true);
   const addMany = async items => {
@@ -816,8 +912,10 @@ function addOptions(me) {
       fresh = ok;
       if (!fresh.length) return toast('אין פה קלפים שמתאימים לכולם');
     }
-    if (room <= 0) return toast('הגעתם למקסימום, תתחילו סיבוב חדש');
-    const pickN = fresh.sort(() => Math.random() - .5).slice(0, Math.min(10, room));
+    if (room <= 0) return toast(`השולחן מלא (${deckSize} קלפים)`);
+    // what the group is into first, shuffled within the same level so packs still feel random
+    const pickN = fresh.map(it => [it, groupLikes(it[1]) + Math.random()]).sort((a, b) => b[1] - a[1]).map(x => x[0])
+      .slice(0, Math.min(10, room));
     const t = Date.now();
     await Promise.all(pickN.map(([emoji, text], i) =>
       store.addOption(gid, { id: newId(10), emoji, text, by: me, ts: t + i })));
@@ -829,7 +927,7 @@ function addOptions(me) {
     const text = own.value.replace(/\s+/g, ' ').trim().slice(0, 40);
     if (!text) return;
     if (have.has(text)) return toast('זה כבר יש');
-    if (room <= 0) return toast('הגעתם למקסימום, תתחילו סיבוב חדש');
+    if (room <= 0) return toast(`השולחן מלא (${deckSize} קלפים)`);
     own.value = '';
     await store.addOption(gid, { id: newId(10), emoji: '✨', text, by: me, ts: Date.now() });
     await store.addMyCard(gid, { id: newId(10), emoji: '✨', text, by: me, ts: Date.now() }); // kept for next rounds
@@ -839,6 +937,13 @@ function addOptions(me) {
   const all = packs.flatMap(p => p.items);
   return h('div', { class: 'panel' },
     h('h3', null, '🃏 להוסיף קלפים'),
+    h('div', { class: 'decksize' },
+      h('span', null, 'כמה קלפים בסיבוב?'),
+      h('div', { class: 'seg' }, DECKS.map(n => h('button', {
+        class: deckSize === n ? 'on' : '', onclick: () => { buzz(8); store.setInfo(gid, { deck: n, ts: Date.now() }); },
+      }, n))),
+    ),
+    h('p', { class: 'muted small', style: 'margin:8px 0 12px' }, `${state.options.length}/${deckSize} על השולחן. בכל חבילה נכנסים קודם הקלפים שהכי מתאימים לחבר'ה`),
     h('div', { class: 'chips' },
       h('button', { class: 'chip on', onclick: () => addMany(all) }, '🎲 הפתעה'),
       state.mycards?.length > 0 && h('button', { class: 'chip ours', onclick: () => addMany(state.mycards.map(c => [c.emoji, c.text])) },
@@ -1064,7 +1169,8 @@ function chatTab(me) {
   const { list } = chatView;
   const msgs = state.chat || [];
   // redraw on a new message or a new poll vote
-  const sig = msgs.length + '|' + Object.entries(state.pollvotes || {}).map(([k, v]) => k + v.opt).sort().join();
+  const sig = msgs.length + '|' + Object.entries(state.pollvotes || {}).map(([k, v]) => k + v.opt).sort().join()
+    + '|' + Object.entries(state.reacts || {}).map(([k, v]) => k + v.e).sort().join();
   if (sig !== chatView.count) {
     const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80 || chatView.count === -1;
     chatView.count = sig;
@@ -1074,11 +1180,14 @@ function chatTab(me) {
       const day = dayLabel(m.ts);
       if (day !== lastDay) { items.push(h('div', { class: 'chatday' }, day)); lastDay = day; lastFrom = ''; }
       const mine = m.uid === user.uid;
-      items.push(h('div', { class: 'msg' + (mine ? ' mine' : '') + (m.from === lastFrom ? ' cont' : '') },
+      const bubble = h('div', { class: 'msg' + (mine ? ' mine' : '') + (m.from === lastFrom ? ' cont' : '') },
         !mine && m.from !== lastFrom && h('span', { class: 'from', style: `color:hsl(${hue(m.from)} 70% 50%)` }, m.from),
         m.kind === 'poll' ? pollBubble(m, me) : h('span', { class: 'txt' }, m.text),
         h('span', { class: 'time' }, hhmm(m.ts)),
-      ));
+        reactionRow(m, me),
+      );
+      holdToReact(bubble, m, me);
+      items.push(bubble);
       lastFrom = m.from;
     }
     if (!msgs.length) items.push(h('div', { class: 'chatempty' }, h('div', null, '💬'), 'עוד אין הודעות תפתחו את השיחה'));
@@ -1280,7 +1389,7 @@ function planPanel(me, what) {
 /* ---------- first time: three quick slides ---------- */
 
 const SLIDES = [
-  ['👉', 'סוויפ', 'ימינה זה כן, שמאלה זה לא, ולמעלה זה ⭐ סופר לייק. יש 3 לכל סיבוב'],
+  ['👉', 'סוויפ', 'ימינה כן, שמאלה לא, למעלה ⭐ סופר לייק ולמטה 🚫 וטו. לוחצים על קלף כדי לראות מה זה'],
   ['🙋', 'מה מתאים לך', 'בלשונית "החבר\'ה" מסמנים מה בא לך, מה לא מתאים, גיל ותקציב. קלפים שלא מתאימים למישהו מקבלים ⚠️'],
   ['🎉', 'ואז יוצאים', 'כשיש התאמה בוחרים מתי, מקבלים תוכנית עם לוח זמנים ומסלול, ובמי חייב מסדרים את הכסף'],
 ];
@@ -1377,6 +1486,39 @@ function ridesPanel(me) {
         ),
     noRide.length > 0 && h('p', { class: 'muted small', style: 'margin:8px 0 0' }, '🙋 עוד בלי הסעה: ' + noRide.join(', ')),
   );
+}
+
+/* ---------- chat reactions: hold a message (or right-click) to react ---------- */
+
+const REACTS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+function reactionRow(m, me) {
+  const all = Object.entries(state.reacts || {}).filter(([, r]) => r.msg === m.id).map(([k, r]) => ({ who: k.slice(m.id.length + 2), e: r.e }));
+  if (!all.length) return null;
+  const counts = {};
+  for (const r of all) (counts[r.e] ||= []).push(r.who);
+  return h('div', { class: 'reacts' }, Object.entries(counts).map(([e, who]) => h('button', {
+    class: 'react' + (who.includes(me) ? ' mine' : ''), title: who.join(', '),
+    onclick: ev => { ev.stopPropagation(); store.react(gid, m.id, me, who.includes(me) ? null : e); },
+  }, e, who.length > 1 ? h('b', null, who.length) : null)));
+}
+function holdToReact(el, m, me) {
+  let t = null;
+  const open = () => {
+    document.querySelectorAll('.reactpick').forEach(x => x.remove());
+    buzz(10);
+    const mineNow = state.reacts?.[m.id + '__' + me]?.e;
+    const pick = h('div', { class: 'reactpick' }, REACTS.map(e => h('button', {
+      class: mineNow === e ? 'on' : '',
+      onclick: ev => { ev.stopPropagation(); pick.remove(); store.react(gid, m.id, me, mineNow === e ? null : e); },
+    }, e)));
+    el.append(pick);
+    setTimeout(() => addEventListener('pointerdown', function off(ev) {
+      if (!pick.contains(ev.target)) { pick.remove(); removeEventListener('pointerdown', off); }
+    }), 0);
+  };
+  el.onpointerdown = () => { t = setTimeout(open, 450); };
+  el.onpointerup = el.onpointerleave = el.onpointercancel = () => clearTimeout(t);
+  el.oncontextmenu = e => { e.preventDefault(); open(); };
 }
 
 /* ---------- 7. quick polls in the chat ---------- */

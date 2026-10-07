@@ -19,8 +19,10 @@
 //   rides/{name}       {seats} if I drive, {with: driver} if I ride
 //   mycards/{id}       {emoji, text, by}    the group's own ideas, kept between rounds
 //   pollvotes/{poll__name}  {poll, opt}     answers to chat polls
+//   reacts/{msg__name} {msg, e}             emoji reactions on chat messages
+//   votes values: 0 no, 1 yes, 2 super like, -1 veto
 //
-// A group watcher gets: {group, round, here, profiles, hidden, options, votes, when, chat, expenses, settlements, budget, kitty, info, plan, bring, rides, mycards, pollvotes}
+// A group watcher gets: {group, round, here, profiles, hidden, options, votes, when, chat, expenses, settlements, budget, kitty, info, plan, bring, rides, mycards, pollvotes, reacts}
 
 import { firebaseConfig } from './firebase-config.js';
 
@@ -29,7 +31,7 @@ export const isLive = !!(firebaseConfig && firebaseConfig.projectId);
 const empty = () => ({
   group: null, round: null, here: {}, profiles: {}, hidden: [], options: [], votes: {},
   when: {}, chat: [], expenses: [], settlements: [], budget: null, kitty: [], info: null, plan: null,
-  bring: {}, rides: {}, mycards: [], pollvotes: {},
+  bring: {}, rides: {}, mycards: [], pollvotes: {}, reacts: {},
 });
 
 export function newId(len = 16) {
@@ -147,6 +149,8 @@ function localStore() {
         s.votes[member][optId] = val;
       });
     },
+    async unvote(gid, member, optId) { write(gid, s => { if (Object.hasOwn(s.votes, member)) delete s.votes[member][optId]; }); },
+    async react(gid, msg, name, e) { write(gid, s => { const k = msg + '__' + name; if (e) s.reacts[k] = { msg, e }; else delete s.reacts[k]; }); },
     async clearRound(gid) {
       write(gid, s => { s.options = []; s.votes = {}; s.here = {}; s.when = {}; s.plan = null; s.bring = {}; s.rides = {}; s.round = { status: 'lobby', owner: s.round?.owner || null, ts: Date.now() }; });
     },
@@ -228,7 +232,7 @@ async function firebaseStore() {
     // Everything inside first (Firestore doesn't delete sub-collections with their parent), then the code, then the group.
     async deleteGroup(gid, code) {
       const SUBS = ['round', 'here', 'profiles', 'hidden', 'options', 'votes', 'when', 'chat', 'expenses', 'settlements',
-        'budget', 'kitty', 'info', 'plan', 'bring', 'rides', 'mycards', 'pollvotes'];
+        'budget', 'kitty', 'info', 'plan', 'bring', 'rides', 'mycards', 'pollvotes', 'reacts'];
       const refs = [];
       for (const name of SUBS) (await fs.getDocs(sub(gid, name))).forEach(d => refs.push(d.ref));
       for (let i = 0; i < refs.length; i += 450) {
@@ -268,6 +272,7 @@ async function firebaseStore() {
         fs.onSnapshot(sub(gid, 'bring'), q => { s.bring = Object.fromEntries(q.docs.map(d => [d.id, d.data()])); push(); }, () => {}),
         fs.onSnapshot(sub(gid, 'rides'), q => { s.rides = Object.fromEntries(q.docs.map(d => [d.id, d.data()])); push(); }, () => {}),
         fs.onSnapshot(sub(gid, 'mycards'), q => { s.mycards = q.docs.map(d => d.data()).sort(byTs); push(); }, () => {}),
+        fs.onSnapshot(sub(gid, 'reacts'), q => { s.reacts = Object.fromEntries(q.docs.map(d => [d.id, d.data()])); push(); }, () => {}),
         fs.onSnapshot(sub(gid, 'pollvotes'), q => { s.pollvotes = Object.fromEntries(q.docs.map(d => [d.id, d.data()])); push(); }, () => {}),
         fs.onSnapshot(sub(gid, 'kitty'), q => { s.kitty = q.docs.map(d => d.data()).sort(byTs); push(); }, () => {}),
         fs.onSnapshot(sub(gid, 'expenses'), q => { s.expenses = q.docs.map(d => d.data()).sort(byTs); push(); }, () => {}),
@@ -276,6 +281,10 @@ async function firebaseStore() {
       return () => unsubs.forEach(u => u());
     },
     addOption: (gid, o) => fs.setDoc(fs.doc(sub(gid, 'options'), o.id), o),
+    unvote: (gid, member, optId) => fs.setDoc(fs.doc(sub(gid, 'votes'), member), { [optId]: fs.deleteField() }, { merge: true }),
+    react: (gid, msg, name, e) => e
+      ? fs.setDoc(fs.doc(sub(gid, 'reacts'), msg + '__' + name), { msg, e, ts: Date.now() })
+      : fs.deleteDoc(fs.doc(sub(gid, 'reacts'), msg + '__' + name)),
     setVote: (gid, member, optId, val) => fs.setDoc(fs.doc(sub(gid, 'votes'), member), { [optId]: val }, { merge: true }),
     async clearRound(gid) {
       const batch = fs.writeBatch(db);

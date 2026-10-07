@@ -111,6 +111,14 @@ service cloud.firestore {
         allow delete: if member();
         allow update: if false;
       }
+      // a chat reaction: doc id is "<message id>__<my name>", one per person per message
+      match /reacts/{id} {
+        allow read, delete: if member();
+        allow create, update: if member()
+          && id == request.resource.data.msg + '__' + myName()
+          && request.resource.data.keys().hasOnly(['msg', 'e', 'ts'])
+          && shortStr(request.resource.data.e, 8);
+      }
       // a poll answer: doc id is "<poll id>__<my name>", so one answer per person per poll
       match /pollvotes/{id} {
         allow read: if member();
@@ -208,7 +216,8 @@ service cloud.firestore {
       match /info/{doc} {
         allow read: if member();
         allow write: if member() && doc == 'state'
-          && request.resource.data.keys().hasOnly(['region', 'meet', 'ts'])
+          && request.resource.data.keys().hasOnly(['region', 'meet', 'deck', 'repeat', 'ts'])
+          && (!('deck' in request.resource.data) || request.resource.data.deck in [10, 15, 25])
           && (!('region' in request.resource.data) || request.resource.data.region in ['', 'north', 'haifa', 'sharon', 'center', 'jerusalem', 'shfela', 'south', 'eilat'])
           && (!('meet' in request.resource.data) || optStr(request.resource.data.meet, 40));
       }
