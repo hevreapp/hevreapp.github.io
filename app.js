@@ -1,10 +1,10 @@
-import { store, isLive, newId, newCode } from './store.js';
-import { balances, transfers, shekels } from './split.js';
-import { packs } from './ideas.js';
-import { confetti, buzz, CARD_HUES } from './fx.js';
-import { REGIONS, regionName, planFor, addMin } from './plan-data.js';
-import { EXPLAIN } from './explain.js';
-import { API, VAPID_KEY } from './api-config.js';
+import { store, isLive, newId, newCode } from './store.js?v=20261007231337';
+import { balances, transfers, shekels } from './split.js?v=20261007231337';
+import { packs } from './ideas.js?v=20261007231337';
+import { confetti, buzz, CARD_HUES } from './fx.js?v=20261007231337';
+import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261007231337';
+import { EXPLAIN } from './explain.js?v=20261007231337';
+import { API, VAPID_KEY } from './api-config.js?v=20261007231337';
 
 // The always-on server (AI + notifications). Fire and forget: the site works the same without it.
 async function callApi(path, body) {
@@ -16,7 +16,7 @@ async function callApi(path, body) {
     return r.ok ? r.json() : null;
   } catch { return null; }
 }
-import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js';
+import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261007231337';
 
 const root = document.getElementById('app');
 // Same falsy-skipping as h(), so `cond && el` works at the top level too.
