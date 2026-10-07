@@ -1243,8 +1243,23 @@ async function turnOnPush() {
 }
 function pushButton() {
   const on = ls.get(pushKey(), false) && 'Notification' in window && Notification.permission === 'granted';
-  return h('button', { class: 'pushbtn' + (on ? ' on' : ''), onclick: on ? () => toast('🔔 ההתראות כבר פועלות בטלפון הזה') : turnOnPush, 'aria-label': 'התראות' },
+  return h('button', { class: 'pushbtn' + (on ? ' on' : ''), onclick: on ? pushSelfTest : turnOnPush, 'aria-label': 'התראות' },
     on ? '🔔' : '🔕');
+}
+// Tapping 🔔 when it's on: show a notification from the phone itself (no server) and say what we see.
+// Splits "the phone won't show notifications" from "pushes don't reach the phone".
+async function pushSelfTest() {
+  const info = [];
+  try {
+    info.push('הרשאה: ' + Notification.permission);
+    const reg = await navigator.serviceWorker.getRegistration();
+    info.push('sw: ' + (reg ? (reg.active ? 'פעיל' : 'לא פעיל') : 'אין'));
+    const sub = reg && await reg.pushManager.getSubscription();
+    info.push('מנוי: ' + (sub ? 'יש' : 'אין'));
+    if (reg) await reg.showNotification("חבר'ה", { body: 'בדיקה מקומית 🔔 אם אתה רואה את זה, הטלפון מציג התראות', icon: 'icon-192.png', tag: 'selftest' });
+    if (!sub) { await store.enablePush(user.uid, VAPID_KEY); info.push('נרשם מחדש'); }
+  } catch (e) { info.push('שגיאה: ' + String(e?.message || e).slice(0, 60)); }
+  toast(info.join(' · '));
 }
 // keep this phone's token fresh, and show a small toast for other groups while the site is open
 let pushBooted = false;
