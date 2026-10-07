@@ -1258,6 +1258,8 @@ async function pushSelfTest() {
     info.push('מנוי: ' + (sub ? 'יש' : 'אין'));
     if (reg) await reg.showNotification("חבר'ה", { body: 'בדיקה מקומית 🔔 אם אתה רואה את זה, הטלפון מציג התראות', icon: 'icon-192.png', tag: 'selftest' });
     if (!sub) { await store.enablePush(user.uid, VAPID_KEY); info.push('נרשם מחדש'); }
+    const tok = await store.currentToken(VAPID_KEY).catch(() => null);
+    info.push('טביעה: ' + (tok ? tok.slice(0, 10) : 'אין'));
   } catch (e) { info.push('שגיאה: ' + String(e?.message || e).slice(0, 60)); }
   toast(info.join(' · '));
 }

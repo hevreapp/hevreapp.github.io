@@ -154,6 +154,7 @@ function localStore() {
     async unvote(gid, member, optId) { write(gid, s => { if (Object.hasOwn(s.votes, member)) delete s.votes[member][optId]; }); },
     async sendAI(gid, msg) { write(gid, s => { s.aichat.push(msg); s.aichat = s.aichat.slice(-CHAT_MAX); }); },
     async enablePush() { return false; },
+    async currentToken() { return null; },
     async idToken() { return null; },
     onForegroundPush() {},
     async react(gid, msg, name, e) { write(gid, s => { const k = msg + '__' + name; if (e) s.reacts[k] = { msg, e }; else delete s.reacts[k]; }); },
@@ -300,6 +301,11 @@ async function firebaseStore() {
       if (!token) return false;
       await fs.setDoc(fs.doc(db, 'users', uid, 'push', token), { token, ts: Date.now() });
       return true;
+    },
+    async currentToken(vapidKey) {
+      if (!fm) return null;
+      const reg = await navigator.serviceWorker.getRegistration();
+      return reg ? fm.getToken(fm.getMessaging(fapp), { vapidKey, serviceWorkerRegistration: reg }) : null;
     },
     onForegroundPush(cb) { if (fm) fm.isSupported().then(ok => ok && fm.onMessage(fm.getMessaging(fapp), m => cb(m.data || {}))).catch(() => {}); },
     unvote: (gid, member, optId) => fs.setDoc(fs.doc(sub(gid, 'votes'), member), { [optId]: fs.deleteField() }, { merge: true }),
