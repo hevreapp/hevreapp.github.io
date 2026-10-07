@@ -14,11 +14,7 @@ const paintBar = () => {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bg);
 };
 function switchTheme(mode) {
-  const apply = () => {
-    if (mode === 'dark') document.documentElement.dataset.theme = 'dark';
-    else delete document.documentElement.dataset.theme;
-    paintBar();
-  };
+  const apply = () => { document.documentElement.dataset.theme = mode; paintBar(); };
   if (reduce || !document.startViewTransition) return apply();
   // the new theme grows out of wherever the sun or moon lands
   const c = document.querySelector('.theme-switch__container').getBoundingClientRect();

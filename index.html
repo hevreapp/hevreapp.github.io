@@ -6,9 +6,10 @@
 <title>חבר'ה</title>
 <meta name="description" content="מחליטים מה עושים ומי חייב למי בלי לריב בקבוצה">
 <meta name="theme-color" content="#F4F4F7">
-<!-- Light only, said up front: phone browsers with "dark mode for websites" (Samsung Internet, Chrome)
-     leave a page alone when it declares its own scheme, instead of repainting it dark. -->
-<meta name="color-scheme" content="only light">
+<!-- The page has its own night mode, declared the standard way (color-scheme + a prefers-color-scheme
+     block below). Samsung Internet only leaves a page's colours alone when it finds that; otherwise it
+     repaints even the day theme dark. -->
+<meta name="color-scheme" content="light dark">
 <meta name="darkreader-lock">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤙</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,7 +17,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800;900&display=swap" rel="stylesheet">
 <script>
   // Before first paint, so a saved night choice never flashes white.
-  try { if (localStorage.getItem('hevre:theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch {}
+  // the saved choice, or the phone's own setting the first time
+  try {
+    const t = localStorage.getItem('hevre:theme');
+    document.documentElement.dataset.theme = t === 'dark' || t === 'light' ? t : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  } catch {}
 </script>
 <style>
   /* ================= TOKENS =================
@@ -34,7 +39,7 @@
     --grad: #3D5AFE;
     --surface: #FFFFFF; --btn: #0B0B10; --btn-ink: #FFFFFF; --btn-hover: #24242C;
     --ease: cubic-bezier(.22, .61, .36, 1); --spring: cubic-bezier(.34, 1.56, .64, 1);
-    color-scheme: only light;
+    color-scheme: light;
   }
   /* Night: the same clean layout on near-black, cards one step lighter. Only by choice (the sky
      switch), never by the phone's setting, so a browser's own dark mode has nothing to fight. */
@@ -48,6 +53,19 @@
     --btn: #F2F2F6; --btn-ink: #0E0E13; --btn-hover: #DCDCE3;
     --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 14px 34px -18px rgba(0, 0, 0, .9);
     color-scheme: dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0E0E13; --bg2: #0E0E13;
+      --ink: #F2F2F6; --muted: #9C9CA8; --line: #2A2A33;
+      --glass: #17171D; --glass-strong: #1C1C23; --glass-edge: #2A2A33;
+      --surface: #17171D; --soft: #202028;
+      --accent: #6E80FF; --accent-soft: #1E2246; --grad: #6E80FF;
+      --yes: #2FD07A; --no: #FF6369;
+      --btn: #F2F2F6; --btn-ink: #0E0E13; --btn-hover: #DCDCE3;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 14px 34px -18px rgba(0, 0, 0, .9);
+      color-scheme: dark;
+    }
   }
 
   /* ================= BASE ================= */
