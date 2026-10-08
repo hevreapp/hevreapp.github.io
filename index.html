@@ -547,6 +547,13 @@
   .people { display: grid; gap: 10px; }
   .person { padding: 12px; border-radius: 18px; background: var(--soft); }
   .person-top { display: flex; align-items: center; gap: 10px; }
+  .crown { font-size: 15px; }
+  .kickbtn { margin-inline-start: auto; width: 32px; height: 32px; flex: none; border-radius: 10px; font-size: 14px; background: var(--surface); opacity: .65; transition: opacity .2s, transform .2s var(--spring); }
+  .kickbtn:hover { opacity: 1; }
+  .kickbtn:active { transform: scale(.88); }
+  .kicked { display: grid; gap: 8px; }
+  .kick-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 16px; background: var(--soft); }
+  .kick-row .chip { margin-inline-start: auto; }
   .person-note { margin: 8px 0 0; font-size: 14px; color: var(--muted); }
 
   .nudge {
@@ -985,6 +992,6 @@
 <div id="app"></div>
 <canvas id="confetti"></canvas>
 <div class="toast" id="toast"></div>
-<script type="module" src="app.js?v=20261007233445"></script>
+<script type="module" src="app.js?v=20261008143426"></script>
 </body>
 </html>

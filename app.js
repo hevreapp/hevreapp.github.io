@@ -1,10 +1,10 @@
-import { store, isLive, newId, newCode } from './store.js?v=20261007233445';
-import { balances, transfers, shekels } from './split.js?v=20261007233445';
-import { packs } from './ideas.js?v=20261007233445';
-import { confetti, buzz, CARD_HUES } from './fx.js?v=20261007233445';
-import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261007233445';
-import { EXPLAIN } from './explain.js?v=20261007233445';
-import { API, VAPID_KEY } from './api-config.js?v=20261007233445';
+import { store, isLive, newId, newCode } from './store.js?v=20261008143426';
+import { balances, transfers, shekels } from './split.js?v=20261008143426';
+import { packs } from './ideas.js?v=20261008143426';
+import { confetti, buzz, CARD_HUES } from './fx.js?v=20261008143426';
+import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261008143426';
+import { EXPLAIN } from './explain.js?v=20261008143426';
+import { API, VAPID_KEY } from './api-config.js?v=20261008143426';
 
 // The always-on server (AI + notifications). Fire and forget: the site works the same without it.
 async function callApi(path, body) {
@@ -16,7 +16,7 @@ async function callApi(path, body) {
     return r.ok ? r.json() : null;
   } catch { return null; }
 }
-import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261007233445';
+import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261008143426';
 
 const root = document.getElementById('app');
 // Same falsy-skipping as h(), so `cond && el` works at the top level too.
@@ -338,6 +338,17 @@ function unreadIn(g, last) {
 
 function renderJoin() {
   const g = state.group;
+  if (g.banned?.[user.uid]) {
+    app.replaceChildren(
+      h('div', { class: 'hero' },
+        h('div', { class: 'wave' }, '🚪'),
+        h('div', { class: 'logo sm' }, g.name),
+        h('p', { class: 'tag' }, 'מנהל הקבוצה הוציא אותך ממנה'),
+      ),
+      h('a', { class: 'btn wide', href: '#' }, 'לקבוצות שלי'),
+    );
+    return;
+  }
   const err = h('div', { class: 'err' });
   const go = h('button', { class: 'btn wide' }, 'יאללה אני בפנים');
   go.onclick = async () => {
@@ -1093,7 +1104,22 @@ function peopleTab(me) {
     toast('נשמר');
   };
 
-  const others = state.group.members.filter(m => m !== me);
+  const g = state.group;
+  const others = g.members.filter(m => m !== me);
+  const amAdmin = g.owner === user.uid;
+  const admin = g.people[g.owner];
+  const uidOf = n => Object.keys(g.people).find(u => g.people[u] === n);
+  const kick = async m => {
+    if (!confirm(`להוציא את ${m} מהקבוצה?
+אי אפשר יהיה לחזור עם הקוד, עד שתחזיר מהרשימה של מי שהוצא`)) return;
+    try { await store.kick(gid, uidOf(m), m); buzz(30); toast(`הוצאת את ${m}`); }
+    catch { toast('משהו נתקע, תנסה שוב'); }
+  };
+  const unban = async (u, n) => {
+    try { await store.unban(gid, u); toast(`${n} יכול לחזור עם הקוד`); }
+    catch { toast('משהו נתקע, תנסה שוב'); }
+  };
+  const banned = Object.entries(g.banned || {});
 
   return h('div', null,
     h('div', { class: 'panel' },
@@ -1130,12 +1156,22 @@ function peopleTab(me) {
     ),
     others.length > 0 && h('div', { class: 'panel' },
       h('h3', null, '🙋 החבר\'ה'),
-      h('div', { class: 'people' }, others.map(m => personCard(m))),
+      h('p', { class: 'muted small' }, amAdmin ? '👑 אתה המנהל: פתחת את הקבוצה, אז רק אתה יכול להוציא ממנה אנשים' : `👑 מנהל הקבוצה: ${admin}`),
+      h('div', { class: 'people' }, others.map(m => personCard(m, { admin: m === admin, onKick: amAdmin ? () => kick(m) : null }))),
+    ),
+    amAdmin && banned.length > 0 && h('div', { class: 'panel' },
+      h('h3', null, '🚫 מי שהוצאת'),
+      h('p', { class: 'muted small' }, 'הם לא יכולים לחזור עם הקוד. להחזיר = שוב יוכלו להצטרף עם הקוד'),
+      h('div', { class: 'kicked' }, banned.map(([u, n]) => h('div', { class: 'kick-row' },
+        h('span', { class: 'av', style: `--h:${hue(n)}` }, [...n][0]),
+        h('b', null, n),
+        h('button', { class: 'chip', onclick: () => unban(u, n) }, '↩️ להחזיר'),
+      ))),
     ),
   );
 }
 
-function personCard(m) {
+function personCard(m, { admin = false, onKick = null } = {}) {
   const p = profileOf(m);
   const shared = p.share === 'group';
   const empty = !p.likes.length && !p.dislikes.length && (!shared || (!p.limits.length && !p.note && (p.budget ?? ANY_BUDGET) === ANY_BUDGET));
@@ -1143,6 +1179,8 @@ function personCard(m) {
     h('div', { class: 'person-top' },
       h('span', { class: 'av', style: `--h:${hue(m)}` }, [...m][0]),
       h('b', null, m),
+      admin && h('span', { class: 'crown', title: 'מנהל הקבוצה' }, '👑'),
+      onKick && h('button', { class: 'kickbtn', 'aria-label': 'להוציא את ' + m, title: 'להוציא מהקבוצה', onclick: onKick }, '🚫'),
     ),
     empty
       ? h('p', { class: 'muted small', style: 'margin:6px 0 0' }, 'עוד לא מילא')

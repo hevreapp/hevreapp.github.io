@@ -72,17 +72,40 @@ service cloud.firestore {
         && resource.data.members.removeAll(request.resource.data.members) == [resource.data.people[request.auth.uid]];
       allow update: if signedIn()
         && !(request.auth.uid in resource.data.memberUids)
+        && !(request.auth.uid in resource.data.get('banned', {}))   // the creator took them out
         && resource.data.memberUids.size() < 20
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'people', 'members'])
         && request.resource.data.memberUids.removeAll(resource.data.memberUids) == [request.auth.uid]
         && request.resource.data.people.diff(resource.data.people).affectedKeys().hasOnly([request.auth.uid])
         && shortStr(request.resource.data.people[request.auth.uid], 34)
         && request.resource.data.members.removeAll(resource.data.members) == [request.resource.data.people[request.auth.uid]];
+      // The creator (the group's admin) takes one other member out and onto the kept-out list.
+      allow update: if signedIn() && resource.data.owner == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'people', 'members', 'banned'])
+        && kickOk(resource.data, request.resource.data);
+      // ...or lets someone from that list back (they can join again with the code)
+      allow update: if signedIn() && resource.data.owner == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['banned'])
+        && request.resource.data.banned.diff(resource.data.banned).affectedKeys().size() == 1
+        && request.resource.data.banned.size() == resource.data.banned.size() - 1;
       allow delete: if signedIn() && resource.data.owner == request.auth.uid;
 
-      // The creator may clear anything inside when deleting the group.
+      function kickOk(before, after) {
+        let gone = before.memberUids.removeAll(after.memberUids);
+        let was = before.get('banned', {});
+        return gone.size() == 1 && gone[0] != before.owner
+          && after.memberUids.size() == before.memberUids.size() - 1
+          && after.people.diff(before.people).affectedKeys().hasOnly([gone[0]]) && !(gone[0] in after.people)
+          && before.members.removeAll(after.members) == [before.people[gone[0]]]
+          && after.members.size() == before.members.size() - 1
+          && after.banned.diff(was).affectedKeys().hasOnly([gone[0]])
+          && after.banned[gone[0]] == before.people[gone[0]]
+          && after.banned.size() <= 50;
+      }
+
+      // The creator may read and clear anything inside (deleting the group, taking someone out).
       match /{coll}/{doc} {
-        allow delete: if signedIn() && grp().owner == request.auth.uid;
+        allow read, delete: if signedIn() && grp().owner == request.auth.uid;
       }
 
       match /round/{doc} {

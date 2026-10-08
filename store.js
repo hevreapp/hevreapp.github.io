@@ -5,7 +5,7 @@
 //
 // users/{uid}          {name, likes, dislikes, limits, note, share, hidden: {gid: hid}, ts}
 // codes/{CODE}         {gid}                                   join a group by its 6-letter code
-// groups/{gid}         {name, code, owner, memberUids, people: {uid: name}, members: [names], createdAt}
+// groups/{gid}         {name, code, owner, memberUids, people: {uid: name}, members: [names], banned: {uid: name}, createdAt}
 //   round/state        {status: 'lobby'|'live', owner, spin, spinTs}
 //   here/{name}        {ts}                 who walked into this round's lobby
 //   profiles/{name}    {likes, dislikes, limits, note, share}   the part of my profile the group may see
@@ -25,8 +25,9 @@
 //   votes values: 0 no, 1 yes, 2 super like, -1 veto
 //
 // A group watcher gets: {group, round, here, profiles, hidden, options, votes, when, chat, expenses, settlements, budget, kitty, info, plan, bring, rides, mycards, pollvotes, reacts, aichat}
+const NAMED = ['here', 'votes', 'when', 'profiles', 'bring', 'rides']; // docs keyed by a member's name
 
-import { firebaseConfig } from './firebase-config.js?v=20261007233445';
+import { firebaseConfig } from './firebase-config.js?v=20261008143426';
 
 export const isLive = !!(firebaseConfig && firebaseConfig.projectId);
 
@@ -131,9 +132,19 @@ function localStore() {
         s.group.members = s.group.members.filter(m => m !== name);
       });
     },
+    async kick(gid, uid, name) {
+      write(gid, s => {
+        s.group.memberUids = s.group.memberUids.filter(u => u !== uid);
+        delete s.group.people[uid];
+        s.group.members = s.group.members.filter(m => m !== name);
+        s.group.banned = { ...(s.group.banned || {}), [uid]: name };
+        for (const c of NAMED) if (s[c]) delete s[c][name];
+      });
+    },
+    async unban(gid, uid) { write(gid, s => { delete s.group.banned?.[uid]; }); },
     async joinGroup(gid, uid, name) {
       write(gid, s => {
-        if (s.group.memberUids.includes(uid)) return;
+        if (s.group.memberUids.includes(uid) || s.group.banned?.[uid]) return;
         s.group.memberUids.push(uid); s.group.people[uid] = name; s.group.members.push(name);
       });
     },
@@ -244,7 +255,9 @@ async function firebaseStore() {
       const SUBS = ['round', 'here', 'profiles', 'hidden', 'options', 'votes', 'when', 'chat', 'expenses', 'settlements',
         'budget', 'kitty', 'info', 'plan', 'bring', 'rides', 'mycards', 'pollvotes', 'reacts', 'aichat', 'aiusage'];
       const refs = [];
-      for (const name of SUBS) (await fs.getDocs(sub(gid, name))).forEach(d => refs.push(d.ref));
+      for (const name of SUBS) {
+        try { (await fs.getDocs(sub(gid, name))).forEach(d => refs.push(d.ref)); } catch {} // e.g. the AI's counter, before the new rules
+      }
       for (let i = 0; i < refs.length; i += 450) {
         const batch = fs.writeBatch(db);
         refs.slice(i, i + 450).forEach(r => batch.delete(r));
@@ -256,6 +269,15 @@ async function firebaseStore() {
     leaveGroup: (gid, uid, name) => fs.updateDoc(g(gid), {
       memberUids: fs.arrayRemove(uid), [`people.${uid}`]: fs.deleteField(), members: fs.arrayRemove(name),
     }),
+    // The creator takes someone out: off the member list, onto the kept-out list, and their round stuff cleared.
+    async kick(gid, uid, name) {
+      await fs.updateDoc(g(gid), {
+        memberUids: fs.arrayRemove(uid), [`people.${uid}`]: fs.deleteField(), members: fs.arrayRemove(name), [`banned.${uid}`]: name,
+      });
+      await Promise.all(NAMED.map(c => fs.deleteDoc(fs.doc(sub(gid, c), name)).catch(() => {})));
+    },
+    // back in: they can join again with the code
+    unban: (gid, uid) => fs.updateDoc(g(gid), { [`banned.${uid}`]: fs.deleteField() }),
     joinGroup: (gid, uid, name) => fs.updateDoc(g(gid), {
       memberUids: fs.arrayUnion(uid), [`people.${uid}`]: name, members: fs.arrayUnion(name),
     }),
