@@ -30,7 +30,25 @@
 <meta name="apple-mobile-web-app-title" content="חבר'ה">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<!-- the font doesn't hold the page back: text shows in the phone's font and switches when Rubik arrives -->
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800;900&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800;900&display=swap" rel="stylesheet"></noscript>
+<!-- every code file the page needs, fetched together instead of one after another (bump.py stamps the versions) -->
+<link rel="modulepreload" href="app.js?v=20261008235954">
+<link rel="modulepreload" href="store.js?v=20261008235954">
+<link rel="modulepreload" href="firebase-config.js?v=20261008235954">
+<link rel="modulepreload" href="api-config.js?v=20261008235954">
+<link rel="modulepreload" href="split.js?v=20261008235954">
+<link rel="modulepreload" href="ideas.js?v=20261008235954">
+<link rel="modulepreload" href="fx.js?v=20261008235954">
+<link rel="modulepreload" href="plan-data.js?v=20261008235954">
+<link rel="modulepreload" href="explain.js?v=20261008235954">
+<link rel="modulepreload" href="tags.js?v=20261008235954">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js">
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
 <script>
   // Before first paint, so a saved night choice never flashes white.
   // the saved choice, or the phone's own setting the first time
@@ -955,6 +973,21 @@
   .errs { display: grid; gap: 8px; }
   .err-row { display: grid; gap: 2px; padding: 10px 12px; border-radius: 14px; background: var(--soft); font-size: 13px; }
   .err-row small { color: var(--muted); font-size: 11px; }
+  .gtx .next { color: var(--accent); font-weight: 700; }
+  .pick-out { margin: 12px 0 4px; padding: 18px 12px; border-radius: 18px; background: var(--soft); text-align: center; font-size: 26px; font-weight: 900; min-height: 34px; }
+  .aiplan { white-space: pre-wrap; text-align: right; line-height: 1.7; margin: 0 0 12px; max-height: 55vh; overflow: auto; }
+  .sched-week { display: grid; gap: 4px; }
+  .sched-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 10px; }
+  .sched-row.on { background: var(--accent-soft); }
+  .sched-dn { width: 24px; font-weight: 700; font-size: 13px; }
+  .sched-bar { position: relative; flex: 1; height: 14px; border-radius: 7px; background: var(--soft); overflow: hidden; }
+  .sched-bar i { position: absolute; top: 0; bottom: 0; background: var(--no); opacity: .75; border-radius: 4px; }
+  .sched-scale { display: flex; justify-content: space-between; padding-inline-start: 38px; font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .sched-add { align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .sched-add .timein { width: auto; min-width: 96px; }
+  .sched-chip { display: inline-flex; align-items: center; gap: 6px; }
+  .sched-x { font-size: 16px; line-height: 1; padding: 0 2px; color: inherit; opacity: .8; }
+  .schedhint { display: grid; gap: 4px; margin: 0 0 10px; padding: 10px 12px; border-radius: 14px; background: var(--accent-soft); font-size: 14px; }
   .waitbox { margin: 0 auto 10px; max-width: 420px; padding: 14px 16px; border-radius: 16px; background: var(--accent-soft); color: var(--ink); text-align: center; font-weight: 700; }
   .bday { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 12px; border-radius: 16px; background: var(--accent-soft); }
   .bday-em { font-size: 30px; }
@@ -1038,6 +1071,6 @@
 <div id="app"></div>
 <canvas id="confetti"></canvas>
 <div class="toast" id="toast"></div>
-<script type="module" src="app.js?v=20261008223714"></script>
+<script type="module" src="app.js?v=20261008235954"></script>
 </body>
 </html>

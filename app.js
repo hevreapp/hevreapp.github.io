@@ -1,10 +1,10 @@
-import { store, isLive, newId, newCode } from './store.js?v=20261008223714';
-import { balances, transfers, shekels } from './split.js?v=20261008223714';
-import { packs } from './ideas.js?v=20261008223714';
-import { confetti, buzz, CARD_HUES } from './fx.js?v=20261008223714';
-import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261008223714';
-import { EXPLAIN } from './explain.js?v=20261008223714';
-import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261008223714';
+import { store, isLive, newId, newCode } from './store.js?v=20261008235954';
+import { balances, transfers, shekels } from './split.js?v=20261008235954';
+import { packs } from './ideas.js?v=20261008235954';
+import { confetti, buzz, CARD_HUES } from './fx.js?v=20261008235954';
+import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261008235954';
+import { EXPLAIN } from './explain.js?v=20261008235954';
+import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261008235954';
 
 // The always-on server (AI + notifications). Fire and forget: the site works the same without it.
 async function callApi(path, body) {
@@ -16,6 +16,9 @@ async function callApi(path, body) {
     return r.ok ? r.json() : null;
   } catch { return null; }
 }
+
+// The service worker keeps the site's files on the phone: quick start, and the page opens with no signal.
+if (isLive && 'serviceWorker' in navigator) navigator.serviceWorker.register('firebase-messaging-sw.js', { updateViaCache: 'none' }).catch(() => {});
 
 // Something failed on this phone: tell the server what and where (never what anyone wrote),
 // so it shows on the 📊 page before friends start complaining.
@@ -41,7 +44,7 @@ function uaShort() {
 }
 addEventListener('error', e => report(e.error || { message: e.message }, 'קוד'));
 addEventListener('unhandledrejection', e => report(e.reason, 'קוד'));
-import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261008223714';
+import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261008235954';
 
 const root = document.getElementById('app');
 // Same falsy-skipping as h(), so `cond && el` works at the top level too.
@@ -99,6 +102,8 @@ async function share(text, url) {
 }
 
 const groupUrl = gid => location.origin + location.pathname + '#g=' + gid;
+// what gets shared to invite people: through the server, so WhatsApp shows the group's name
+const inviteUrl = id => (API && isLive ? `${API}/g/${id}` : groupUrl(id));
 
 /* ---------- who's signed in ---------- */
 
@@ -316,7 +321,8 @@ function renderHome() {
           const unread = unreadIn(g.gid, g.lastChat);
           return h('a', { class: 'gcard', href: '#g=' + g.gid, style: `--h:${hue(g.name)};animation-delay:${i * 50}ms` },
             h('span', { class: 'gav' }, [...g.name][0]),
-            h('span', { class: 'gtx' }, h('b', null, g.name, isMuted(g.gid) && h('span', { class: 'mutedmark', title: 'בשקט' }, ' 🔕')), h('small', null, g.members.join(', '))),
+            h('span', { class: 'gtx' }, h('b', null, g.name, isMuted(g.gid) && h('span', { class: 'mutedmark', title: 'בשקט' }, ' 🔕')),
+              nextLine(g) && h('small', { class: 'next' }, nextLine(g)), h('small', null, g.members.join(', '))),
             unread ? h('span', { class: 'badge' }, unread) : h('span', { class: 'arrow' }, '←'),
             h('button', {
               class: 'gdel', 'aria-label': g.owner === user.uid ? 'למחוק את ' + g.name : 'לצאת מ' + g.name,
@@ -345,6 +351,17 @@ function renderHome() {
     ),
   );
   go.classList.remove('wide');
+}
+
+// ⏳ "tomorrow: 🎳 bowling" on the home list, from the day the group picked
+function nextLine(g) {
+  const n = g.next;
+  if (!n?.day) return null;
+  const today = isoDay(new Date());
+  if (n.day < today) return null;
+  const days = Math.round((new Date(n.day + 'T12:00') - new Date(today + 'T12:00')) / 864e5);
+  const when = days === 0 ? 'היום' : days === 1 ? 'מחר' : days === 2 ? 'מחרתיים' : `בעוד ${days} ימים`;
+  return `⏳ ${when}: ${n.emoji || ''} ${n.text}`;
 }
 
 // Anyone can leave. The admin can delete the group for everyone, or hand it to a friend and leave.
@@ -945,7 +962,7 @@ function lobby(me) {
               }, '📲 תזכיר'),
         )),
       ),
-      h('button', { class: 'glassbtn wide', onclick: () => share(`פתחתי לנו קבוצה ב"חבר'ה" תכנסו`, groupUrl(gid)) }, '📤 תזמין את מי שחסר'),
+      h('button', { class: 'glassbtn wide', onclick: () => share(`פתחתי לנו קבוצה ב"חבר'ה" תכנסו`, inviteUrl(gid)) }, '📤 תזמין את מי שחסר'),
     ),
     addOptions(me),
     repeatPanel(),
@@ -1407,7 +1424,7 @@ const isEmptyProfile = p => !p.likes.length && !p.dislikes.length && !p.limits.l
 
 function publicPart(p) {
   const shared = p.share === 'group';
-  return { likes: p.likes, dislikes: p.dislikes, limits: shared ? p.limits : [], note: shared ? p.note : '', budget: shared ? p.budget : ANY_BUDGET, born: shared ? roughBorn(p.born) : '', ...(p.bdayOff ? { bdayOff: true } : {}), share: p.share, ts: Date.now() };
+  return { likes: p.likes, dislikes: p.dislikes, limits: shared ? p.limits : [], note: shared ? p.note : '', budget: shared ? p.budget : ANY_BUDGET, born: shared ? roughBorn(p.born) : '', ...(p.bdayOff ? { bdayOff: true } : {}), ...(shared && p.sched ? { sched: p.sched } : {}), share: p.share, ts: Date.now() };
 }
 
 // Copy my profile into one group (or all of mine).
@@ -1417,7 +1434,7 @@ async function syncProfileTo(g, name) {
   let hid = userDoc?.hidden?.[g];
   if (!hid) { hid = newId(12); await store.saveUser(user.uid, { hidden: { ...(userDoc?.hidden || {}), [g]: hid } }); }
   const hide = p.share === 'hidden';
-  await store.setHidden(g, hid, { tags: hide ? p.limits : [], budget: hide ? p.budget : ANY_BUDGET, born: hide ? roughBorn(p.born) : '' });
+  await store.setHidden(g, hid, { tags: hide ? p.limits : [], budget: hide ? p.budget : ANY_BUDGET, born: hide ? roughBorn(p.born) : '', sched: hide ? p.sched || '' : '' });
 }
 async function syncProfile() {
   for (const g of myGroups) await syncProfileTo(g.gid, g.people[user.uid]);
@@ -1567,6 +1584,7 @@ function peopleTab(me) {
         ? 'אף אחד לא רואה מה סימנת. קלפים שלא מתאימים לך יסומנו רק "לא מתאים למישהו בקבוצה"'
         : 'החבר\'ה בקבוצות שלך רואים את זה ליד השם שלך, ככה הם יודעים לבחור משהו שמתאים גם לך'),
     ),
+    schedPanel(mine, save),
     requests.length > 0 && h('div', { class: 'panel' },
       h('h3', null, '🙋 מבקשים להצטרף'),
       h('div', { class: 'kicked' }, requests.map(r => h('div', { class: 'kick-row' },
@@ -1595,6 +1613,7 @@ function peopleTab(me) {
       amAdmin && h('button', { class: 'linkbtn', style: 'margin:0 0 10px', onclick: () => pickAdmin(g) }, '👑 להעביר את הניהול למישהו אחר'),
       h('div', { class: 'people' }, others.map(m => personCard(m, { admin: m === admin, onKick: amAdmin ? () => kick(m) : null }))),
     ),
+    others.length > 0 && pickerPanel(me),
     amAdmin && banned.length > 0 && h('div', { class: 'panel' },
       h('h3', null, '🚫 מי שהוצאת'),
       h('p', { class: 'muted small' }, 'הם לא יכולים לחזור עם הקוד. להחזיר = שוב יוכלו להצטרף עם הקוד'),
@@ -1917,6 +1936,7 @@ function whenPanel(me, what) {
   return h('div', { class: 'panel when', id: 'when' },
     h('h3', null, '📅 מתי?'),
     h('p', { class: 'muted' }, what ? `מתי עושים ${what}? תסמן את הימים שאתה יכול` : 'תסמן את הימים שאתה יכול'),
+    schedHint(me, days),
     h('div', { class: 'cal' },
       DAYS.map(d => h('span', { class: 'cal-h' }, d)),
       // pad so the first day sits under its weekday
@@ -2022,6 +2042,11 @@ function planPanel(me, what) {
   meet.onblur = saveMeet;
   meet.onkeydown = e => { if (e.key === 'Enter') saveMeet(); };
 
+  // the countdown on everyone's home page follows the picked card and day
+  const nextIso = bestIso();
+  once('next:' + gid + ':' + what.id + ':' + nextIso,
+    !!nextIso && nextIso >= isoDay(new Date()) && (state.group.next?.text !== what.text || state.group.next?.day !== nextIso),
+    () => store.setNext(gid, { emoji: what.emoji || '✨', text: what.text, day: nextIso }).catch(e => report(e, 'ספירה לאחור')));
   const area = info.meet || regionName[info.region] || '';
   const place = base.search || what.text;
   const dest = place + (area ? ` ליד ${area}` : ''); // "near the meeting point" lands on the closest one
@@ -2082,12 +2107,25 @@ function planPanel(me, what) {
     ))),
     earlyBirds.length > 0 && h('div', { class: 'fit warn', style: 'display:block;margin-top:10px;font-size:13px' },
       `⚠️ ${earlyBirds.map(m => m === me ? 'אני' : m).join(', ')} צריך לחזור מוקדם`),
+    (() => {
+      // 🗓️ the planned hours on the picked day against everyone's schedule
+      if (!nextIso) return null;
+      const a = toMin(steps[0][2]); let b = toMin(steps.at(-1)[2]);
+      if (b <= a) b = 1440;
+      const clash = groupScheds(me).filter(x => busyOn(x.s, nextIso).some(([s, e]) => s < b && e > a));
+      if (!clash.length) return null;
+      const named = clash.filter(x => x.m).map(x => x.m === me ? 'אני' : x.m);
+      const anon = clash.length - named.length;
+      return h('div', { class: 'fit warn', style: 'display:block;margin-top:10px;font-size:13px' },
+        '🗓️ לפי הלו"ז ' + [named.length ? named.join(', ') + ' תפוס בחלק מהזמן הזה' : '', anon ? (named.length ? 'ועוד ' + anon : 'מישהו בקבוצה') + ' תפוס בחלק מהזמן' : ''].filter(Boolean).join(' '));
+    })(),
     base.trip && h('p', { class: 'muted small', style: 'margin:8px 0 0' }, 'הזמנים בערך. השעה המדויקת של האוטובוס או משך הנסיעה בכפתורים למטה'),
 
     bringPanel(me, base),
     base.trip && mode === 'car' && ridesPanel(me),
 
     h('div', { class: 'plan-btns' },
+      isLive && API && h('button', { class: 'btn wide ai', onclick: () => aiPlanSheet(me, what) }, '🤖 תכנן לנו'),
       base.search && h('button', {
         class: 'glassbtn wide', onclick: () => nearMe(pos => pos ? mapsSearchAt(base.search, pos) : mapsSearch(dest)),
       }, `🔎 ${base.search} לידי`),
@@ -2135,6 +2173,196 @@ function planPanel(me, what) {
   );
 }
 
+
+// 🤖 the AI writes a full plan for the picked card: times, rough cost each, what to bring, tips (not stored)
+async function aiPlanSheet(me, what) {
+  buzz(10);
+  const body = h('p', { class: 'aiplan' }, '🤖 מתכנן לכם...');
+  let text = '';
+  const send = h('button', { class: 'glassbtn wide', disabled: true, onclick: async () => {
+    const id = newId(12);
+    await store.sendChat(gid, { id, uid: user.uid, from: me, text: ('🤖 התוכנית של ה-AI ל' + what.text + ':\n' + text).slice(0, 500), ts: Date.now() });
+    callApi('/notify', { gid, type: 'chat', id });
+    close(); toast("נשלח לצ'אט 💬");
+  } }, "💬 לשלוח לצ'אט");
+  const close = openSheet('תוכנית מה-AI', close => [
+    h('h3', { style: 'margin:0 0 10px' }, `🤖 ${what.emoji || ''} ${what.text}`),
+    body, send,
+    h('button', { class: 'linkbtn', onclick: close }, 'סגור'),
+  ]);
+  const r = await callApi('/plan', { gid, optId: what.id });
+  text = r?.text || 'לא הצלחתי לתכנן עכשיו, תנסו שוב עוד רגע';
+  body.textContent = text;
+  send.disabled = !r?.text;
+}
+
+// 🎲 who drives / orders / pays: picked at random, then posted to the chat so nobody can quietly re-roll
+let lastPick = null;
+function pickerPanel(me) {
+  const coming = state.group.members.filter(m => state.rsvp?.[m]?.v === 'yes');
+  const pool = coming.length >= 2 ? coming : state.group.members;
+  const QS = [['🚗', 'מי נוהג?'], ['📞', 'מי מזמין?'], ['💳', 'מי משלם?'], ['🧹', 'מי מסדר?']];
+  const out = h('div', { class: 'pick-out', 'aria-live': 'polite' }, lastPick?.gid === gid ? `${lastPick.e} ${lastPick.win}` : '🎲');
+  const spin = async (e, q) => {
+    if (pool.length < 2) return toast('צריך לפחות שניים בקבוצה');
+    buzz(10);
+    const win = pool[crypto.getRandomValues(new Uint32Array(1))[0] % pool.length];
+    for (let i = 0; i < 14; i++) { out.textContent = pool[(i * 7 + 3) % pool.length]; await new Promise(r => setTimeout(r, 45 + i * 14)); }
+    lastPick = { gid, e, q, win };
+    out.textContent = `${e} ${win}`;
+    buzz(30);
+    const id = newId(12);
+    await store.sendChat(gid, { id, uid: user.uid, from: me, text: `🎲 הגרלה: ${q} יצא ${win} ${e}`, ts: Date.now() });
+    callApi('/notify', { gid, type: 'chat', id });
+  };
+  return h('div', { class: 'panel' },
+    h('h3', null, '🎲 הגרלה'),
+    h('p', { class: 'muted small', style: 'margin:0 0 10px' }, (coming.length >= 2 ? 'בין מי שאמר שהוא בא' : "בין כל החבר'ה") + ". התוצאה נשלחת לצ'אט, ככה כולם רואים"),
+    h('div', { class: 'chips' }, QS.map(([e, q]) => h('button', { class: 'chip', onclick: () => spin(e, q) }, e + ' ' + q))),
+    out,
+  );
+}
+
+/* ---------- 🗓️ schedule: when each person is busy, by the hour ---------- */
+// Stored as a JSON string on the user: {w: {weekday: [from, to, ...]}, d: {date: [...]}}, minutes from midnight.
+// It goes to the group like the limits: named if you share your profile, anonymous if you hide it.
+
+const SCHED_FROM = 8 * 60, SCHED_TO = 24 * 60; // the part of the day that matters for going out
+const parseSched = str => {
+  let s = {}; try { s = JSON.parse(str || '{}') || {}; } catch {}
+  const ok = a => Array.isArray(a) ? a.filter(Number.isInteger).slice(0, 40) : [];
+  const w = {}, d = {};
+  for (let i = 0; i < 7; i++) w[i] = ok(s.w?.[i]);
+  for (const [k, v] of Object.entries(s.d || {})) if (/^\d{4}-\d{2}-\d{2}$/.test(k)) d[k] = ok(v);
+  return { w, d };
+};
+const pairs = a => { const out = []; for (let i = 0; i + 1 < a.length; i += 2) out.push([a[i], a[i + 1]]); return out; };
+// sorted, overlapping ranges joined
+const mergeRanges = rs => {
+  const out = [];
+  for (const [a, b] of [...rs].sort((x, y) => x[0] - y[0])) {
+    if (out.length && a <= out.at(-1)[1]) out.at(-1)[1] = Math.max(out.at(-1)[1], b); else out.push([a, b]);
+  }
+  return out;
+};
+const hm = m => m >= 1440 ? '24:00' : `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const toMin = v => { const [a, b] = String(v || '').split(':').map(Number); return Number.isFinite(a) ? a * 60 + (b || 0) : NaN; };
+// busy ranges for one schedule on one date (the weekly ones plus that date's own)
+const busyOn = (s, iso) => [...pairs(s.w[new Date(iso + 'T12:00').getDay()] || []), ...pairs(s.d[iso] || [])];
+// free windows when nobody in the list is busy
+function freeOn(scheds, iso, from = SCHED_FROM, to = SCHED_TO) {
+  const busy = mergeRanges(scheds.flatMap(s => busyOn(s, iso)).map(([a, b]) => [Math.max(a, from), Math.min(b, to)]).filter(([a, b]) => b > a));
+  const out = []; let t = from;
+  for (const [a, b] of busy) { if (a > t) out.push([t, a]); t = Math.max(t, b); }
+  if (t < to) out.push([t, to]);
+  return out;
+}
+// everyone's schedule the group can use: named ones (shared profiles, me) and anonymous ones (hidden)
+function groupScheds(me) {
+  const out = [];
+  for (const m of state.group.members) {
+    const str = m === me ? myProfile().sched : state.profiles?.[m]?.share === 'group' ? state.profiles[m].sched : '';
+    if (str) out.push({ m, s: parseSched(str) });
+  }
+  const myHid = userDoc?.hidden?.[gid];
+  for (const x of state.hidden || []) if (x.id !== myHid && x.sched) out.push({ m: null, s: parseSched(x.sched) });
+  return out;
+}
+
+let schedDay = new Date().getDay(), schedFrom = '16:00', schedTo = '18:00', schedDate = '';
+function schedPanel(mine, save) {
+  const s = parseSched(mine.sched);
+  const DAYN = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+  const today = isoDay(new Date());
+  const put = next => {
+    const w = {}, d = {};
+    for (let i = 0; i < 7; i++) if (next.w[i]?.length) w[i] = next.w[i];
+    for (const [k, v] of Object.entries(next.d)) if (v.length && k >= today) d[k] = v; // past dates drop off
+    buzz(8);
+    save({ sched: Object.keys(w).length || Object.keys(d).length ? JSON.stringify({ w, d }) : '' });
+  };
+  const addRange = (list, from, to) => mergeRanges([...pairs(list), [from, to]]).flat();
+  const readRange = () => {
+    const a = toMin(schedFrom); let b = toMin(schedTo);
+    if (b === 0) b = 1440; // "until 00:00" = until midnight
+    if (!(a >= 0 && b > a && b <= 1440)) { toast('השעות לא הגיוניות'); return null; }
+    return [a, b];
+  };
+  const pct = m => Math.max(0, Math.min(100, ((m - SCHED_FROM) / (SCHED_TO - SCHED_FROM)) * 100));
+  const bar = list => h('span', { class: 'sched-bar' }, pairs(list).map(([a, b]) => pct(b) > pct(a) && h('i', { style: `inset-inline-start:${pct(a)}%;width:${pct(b) - pct(a)}%` })));
+  const from = h('input', { type: 'time', step: 900, class: 'timein', value: schedFrom, onchange: e => { schedFrom = e.target.value; } });
+  const to = h('input', { type: 'time', step: 900, class: 'timein', value: schedTo, onchange: e => { schedTo = e.target.value; } });
+  const date = h('input', { type: 'date', class: 'agein', min: today, value: schedDate, onchange: e => { schedDate = e.target.value; } });
+  const upcoming = Object.entries(s.d).filter(([k, v]) => k >= today && v.length).sort();
+  const chip = (label, onX) => h('span', { class: 'chip on sched-chip' }, label, h('button', { class: 'sched-x', 'aria-label': 'למחוק', onclick: onX }, '×'));
+
+  return h('div', { class: 'panel', id: 'sched' },
+    h('h3', null, '🗓️ הלו"ז שלי'),
+    h('p', { class: 'muted small', style: 'margin:0 0 10px' }, 'מתי אתה תפוס כל שבוע (בית ספר, חוגים, אימונים). ככה האתר וה-AI יודעים מתי כולם פנויים'),
+    h('div', { class: 'sched-week' }, DAYN.map((dn, wd) => h('button', {
+      class: 'sched-row' + (wd === schedDay ? ' on' : ''), 'aria-pressed': wd === schedDay ? 'true' : 'false',
+      onclick: () => { schedDay = wd; render(); },
+    }, h('span', { class: 'sched-dn' }, dn), bar(s.w[wd])))),
+    h('div', { class: 'sched-scale' }, h('span', null, '08:00'), h('span', null, '16:00'), h('span', null, '24:00')),
+    h('label', null, `יום ${DAYN[schedDay]}: מתי אתה תפוס?`),
+    h('div', { class: 'chips' },
+      pairs(s.w[schedDay]).map(([a, b]) => chip(`${hm(a)}–${hm(b)}`, () => {
+        put({ ...s, w: { ...s.w, [schedDay]: pairs(s.w[schedDay]).filter(([x, y]) => !(x === a && y === b)).flat() } });
+      })),
+      !s.w[schedDay].length && h('span', { class: 'muted small' }, 'פנוי כל היום'),
+    ),
+    h('div', { class: 'row sched-add' }, h('span', null, 'מ-'), from, h('span', null, 'עד'), to,
+      h('button', { class: 'btn small', onclick: () => { const r = readRange(); if (r) put({ ...s, w: { ...s.w, [schedDay]: addRange(s.w[schedDay], ...r) } }); } }, '➕')),
+    h('div', { class: 'chips', style: 'margin-top:8px' },
+      h('button', { class: 'chip', onclick: () => { const w = { ...s.w }; for (const i of [0, 1, 2, 3, 4]) w[i] = addRange(w[i], 8 * 60, 14 * 60); put({ ...s, w }); toast('🏫 סימנתי בית ספר א׳ עד ה׳, 08:00 עד 14:00'); } }, '🏫 בית ספר א׳-ה׳ 8:00-14:00'),
+      h('button', { class: 'chip', onclick: () => put({ ...s, w: { ...s.w, [schedDay]: [] } }) }, `🧹 לנקות את יום ${DAYN[schedDay]}`),
+    ),
+    h('label', null, '📌 תאריך מיוחד (מבחן, אירוע משפחתי)'),
+    h('div', { class: 'row sched-add' }, date,
+      h('button', { class: 'btn small', onclick: () => {
+        const r = readRange();
+        if (!r) return;
+        if (!schedDate || schedDate < today) return toast('איזה תאריך?');
+        put({ ...s, d: { ...s.d, [schedDate]: addRange(s.d[schedDate] || [], ...r) } });
+        toast(`📌 ${schedDate.slice(8)}.${Number(schedDate.slice(5, 7))} ${schedFrom} עד ${schedTo}`);
+      } }, '➕')),
+    h('p', { class: 'muted small', style: 'margin:4px 0 0' }, 'השעות של התאריך הן אלה שבחרת למעלה'),
+    upcoming.length > 0 && h('div', { class: 'chips', style: 'margin-top:8px' }, upcoming.flatMap(([k, v]) => pairs(v).map(([a, b]) =>
+      chip(`${k.slice(8)}.${Number(k.slice(5, 7))} ${hm(a)}–${hm(b)}`, () => put({ ...s, d: { ...s.d, [k]: pairs(v).filter(([x, y]) => !(x === a && y === b)).flat() } }))))),
+    h('p', { class: 'muted small', style: 'margin:10px 0 0' }, mine.share === 'hidden'
+      ? '🙈 החבר\'ה לא רואים את הלו"ז שלך, הוא רק עוזר לחשב מתי כולם פנויים'
+      : '👀 החבר\'ה רואים מתי אתה תפוס (בלי פירוט למה). אפשר להסתיר למעלה ב"רק אני"'),
+  );
+}
+
+// 🗓️ in "when?": the next days when everyone who filled a schedule is free in the evening
+function schedHint(me, days) {
+  const sch = groupScheds(me);
+  const members = state.group.members.length;
+  if (!sch.length) return h('button', { class: 'linkbtn', style: 'margin:0 0 8px', onclick: () => { setTab('people'); setTimeout(() => document.getElementById('sched')?.scrollIntoView({ behavior: 'smooth' }), 300); } },
+    '🗓️ תמלאו לו"ז בפרופיל, ואני אגיד מתי כולם פנויים');
+  // today counts only from now on
+  const now = new Date(), nowMin = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 30) * 30;
+  const startOf = iso => (iso === isoDay(now) ? Math.max(16 * 60, nowMin) : 16 * 60);
+  const picks = days.map(d => {
+    const iso = isoDay(d);
+    const win = freeOn(sch.map(x => x.s), iso, startOf(iso)).find(([a, b]) => b - a >= 120);
+    return win && { d, win };
+  }).filter(Boolean).slice(0, 3);
+  const mine = myProfile().sched ? parseSched(myProfile().sched) : null;
+  const autofill = () => {
+    const free = days.map(isoDay).filter(iso => freeOn([mine], iso, startOf(iso)).some(([a, b]) => b - a >= 180));
+    store.setWhen(gid, me, free);
+    toast(`✨ סימנתי ${free.length} ימים שאתה פנוי בהם אחר הצהריים`);
+  };
+  return h('div', { class: 'schedhint' },
+    h('b', null, `🗓️ לפי הלו"ז (${sch.length} מתוך ${members} מילאו)`),
+    picks.length
+      ? picks.map(({ d, win }) => h('div', null, `יום ${DAYS[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}: כולם פנויים מ-${hm(win[0])}${win[1] < 1440 ? ' עד ' + hm(win[1]) : ''}`))
+      : h('div', { class: 'muted' }, 'אין ערב שכולם פנויים בו בשבועיים הקרובים'),
+    mine && h('button', { class: 'linkbtn', style: 'margin:6px 0 0', onclick: autofill }, '✨ לסמן לי את הימים לפי הלו"ז שלי'),
+  );
+}
 
 // 🙋 who's actually coming (not just which day works)
 function rsvpBlock(me, what) {
@@ -2360,7 +2588,7 @@ function inviteSheet(g) {
       h('p', { class: 'muted' }, 'שיסרקו עם המצלמה'),
       box,
       h('div', { class: 'invcode' }, h('small', null, 'או קוד'), h('b', null, g.code)),
-      h('button', { class: 'btn wide', onclick: () => share(`בואו ל"${g.name}" ב"חבר'ה" 🤙 הקוד: ${g.code}`, url) }, '📤 שלח קישור'),
+      h('button', { class: 'btn wide', onclick: () => share(`בואו ל"${g.name}" ב"חבר'ה" 🤙 הקוד: ${g.code}`, inviteUrl(gid)) }, '📤 שלח קישור'),
       h('button', { class: 'linkbtn', onclick: close }, 'סגור'),
     ));
   el.onclick = e => { if (e.target === el) close(); };

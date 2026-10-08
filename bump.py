@@ -11,6 +11,7 @@ root = pathlib.Path(__file__).parent
 
 def stamp(text):
     text = re.sub(r"(from '\./[\w-]+\.js)(\?v=\d+)?'", lambda m: f"{m.group(1)}?v={v}'", text)
+    text = re.sub(r'(href="[\w-]+\.js)(\?v=\d+)?"', lambda m: f'{m.group(1)}?v={v}"', text)  # modulepreload links
     return re.sub(r'(src="app\.js)(\?v=\d+)?"', lambda m: f'{m.group(1)}?v={v}"', text)
 
 for f in ['index.html', *[p.name for p in root.glob('*.js')]]:

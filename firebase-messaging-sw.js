@@ -29,6 +29,48 @@ firebase.messaging().onBackgroundMessage(async payload => {
   });
 });
 
+// ---- quick start and offline: the site's own files stay on the phone ----
+// Pages: network first (so updates show right away), the saved copy when there's no signal.
+// Files with ?v= in the name and the Firebase/font files never change: from the phone first.
+// Only files are kept here, never anyone's data.
+const CACHE = 'hevre-files';
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', e => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  const same = url.origin === self.location.origin;
+  if (req.mode === 'navigate' || (same && /\.(png|json|html)$/.test(url.pathname))) {
+    e.respondWith(networkFirst(req, same && req.mode === 'navigate' ? new URL(url.pathname, url.origin).href : req));
+  } else if ((same && url.searchParams.has('v')) || (url.host === 'www.gstatic.com' && url.pathname.startsWith('/firebasejs/'))
+    || url.host === 'fonts.gstatic.com' || url.host === 'fonts.googleapis.com' || url.host === 'cdnjs.cloudflare.com') {
+    e.respondWith(cacheFirst(req, same ? url : null));
+  }
+});
+async function networkFirst(req, key) {
+  const cache = await caches.open(CACHE);
+  try {
+    const res = await fetch(req);
+    if (res.ok) cache.put(key, res.clone());
+    return res;
+  } catch {
+    return (await cache.match(key)) || Response.error();
+  }
+}
+async function cacheFirst(req, url) {
+  const cache = await caches.open(CACHE);
+  const hit = await cache.match(req);
+  if (hit) return hit;
+  const res = await fetch(req);
+  if (res.ok || res.type === 'opaque') {
+    await cache.put(req, res.clone());
+    // a new version of app.js etc.: drop the old one
+    if (url) for (const k of await cache.keys()) { const u = new URL(k.url); if (u.pathname === url.pathname && u.search !== url.search) cache.delete(k); }
+  }
+  return res;
+}
+
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const data = e.notification.data || {};

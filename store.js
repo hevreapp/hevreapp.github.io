@@ -3,7 +3,7 @@
 //  - Local (localStorage) otherwise: only this browser, for testing before Firebase exists.
 //    "Sign in" there is just a name, and you can switch users to play every friend yourself.
 //
-// users/{uid}          {name, likes, dislikes, limits, note, share, hidden: {gid: hid}, muted: {gid: true}, ts}
+// users/{uid}          {name, likes, dislikes, limits, note, share, hidden: {gid: hid}, muted: {gid: true}, sched: '{w, d}' (busy hours, JSON), ts}
 // codes/{CODE}         {gid}                                   join a group by its 6-letter code
 // groups/{gid}         {name, code, owner, memberUids, people: {uid: name}, members: [names], banned: {uid: name}, createdAt}
 //   round/state        {status: 'lobby'|'live', owner, spin, spinTs}
@@ -27,7 +27,7 @@
 // A group watcher gets: {group, round, here, profiles, hidden, options, votes, when, chat, expenses, settlements, budget, kitty, info, plan, bring, rides, mycards, pollvotes, reacts, aichat}
 const NAMED = ['here', 'votes', 'when', 'profiles', 'bring', 'rides', 'rsvp']; // docs keyed by a member's name
 
-import { firebaseConfig } from './firebase-config.js?v=20261008223714';
+import { firebaseConfig } from './firebase-config.js?v=20261008235954';
 
 export const isLive = !!(firebaseConfig && firebaseConfig.projectId);
 
@@ -157,6 +157,7 @@ function localStore() {
     async unban(gid, uid) { write(gid, s => { delete s.group.banned?.[uid]; }); },
     async setRsvp(gid, name, v) { write(gid, s => { s.rsvp = s.rsvp || {}; if (v) s.rsvp[name] = { v, ts: Date.now() }; else delete s.rsvp[name]; }); },
     async setApproval(gid, on) { write(gid, s => { s.group.approval = on; }); },
+    async setNext(gid, next) { write(gid, s => { s.group.next = next; }); },
     async requestJoin(gid, uid, name) { write(gid, s => { s.requests = (s.requests || []).filter(r => r.uid !== uid).concat({ uid, name, ts: Date.now() }); }); },
     async getRequest(gid, uid) { return (read(gid).requests || []).find(r => r.uid === uid) || null; },
     async cancelRequest(gid, uid) { write(gid, s => { s.requests = (s.requests || []).filter(r => r.uid !== uid); }); },
@@ -200,8 +201,8 @@ function localStore() {
     },
     async setRound(gid, patch) { write(gid, s => { s.round = { status: 'lobby', ...(s.round || {}), ...patch }; }); },
     async setProfile(gid, member, prof) { write(gid, s => { s.profiles[member] = prof; }); },
-    async setHidden(gid, hid, { tags, budget, born }) {
-      write(gid, s => { s.hidden = s.hidden.filter(x => x.id !== hid); if (tags.length || budget < 4 /* 4 = whatever */ || born) s.hidden.push({ id: hid, tags, budget, born }); });
+    async setHidden(gid, hid, { tags, budget, born, sched = '' }) {
+      write(gid, s => { s.hidden = s.hidden.filter(x => x.id !== hid); if (tags.length || budget < 4 /* 4 = whatever */ || born || sched) s.hidden.push({ id: hid, tags, budget, born, sched }); });
     },
     async setBudget(gid, patch) { write(gid, s => { s.budget = { ...(s.budget || {}), ...patch }; }); },
     async setInfo(gid, patch) { write(gid, s => { s.info = { ...(s.info || {}), ...patch }; }); },
@@ -227,13 +228,19 @@ function localStore() {
 
 async function firebaseStore() {
   const V = '10.14.1';
-  const { initializeApp } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`);
-  const fs = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`);
-  const fa = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`);
-  // notifications are optional: browsers without push (old iPhones, some in-app browsers) just skip them
-  const fm = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-messaging.js`).catch(() => null);
+  const sdk = name => import(`https://www.gstatic.com/firebasejs/${V}/firebase-${name}.js`);
+  // all three at once (they used to load one after another)
+  const [{ initializeApp }, fs, fa] = await Promise.all([sdk('app'), sdk('firestore'), sdk('auth')]);
+  // notifications are optional and loaded only when needed: browsers without push just skip them
+  let fmP = null;
+  const getFm = () => (fmP ||= sdk('messaging').catch(() => null));
   const fapp = initializeApp(firebaseConfig);
-  const db = fs.getFirestore(fapp);
+  // Keeps the group's data on the phone: the page shows it right away and works without signal.
+  // Wiped on sign-out (wipeLocal). Private mode or no IndexedDB: plain memory, like before.
+  let db;
+  try { db = fs.initializeFirestore(fapp, { localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }) }); }
+  catch { db = fs.getFirestore(fapp); }
+  const wipeLocal = async () => { try { await fs.terminate(db); await fs.clearIndexedDbPersistence(db); } catch {} };
   const auth = fa.getAuth(fapp);
   const g = gid => fs.doc(db, 'groups', gid);
   const sub = (gid, name) => fs.collection(db, 'groups', gid, name);
@@ -253,7 +260,8 @@ async function firebaseStore() {
         else if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') throw e;
       }
     },
-    signOut: () => fa.signOut(auth),
+    // signing out also clears what this phone kept of the groups (a shared phone shouldn't show them to the next person)
+    async signOut() { await fa.signOut(auth); await wipeLocal(); location.reload(); },
     testUsers: () => [],
 
     /* users */
@@ -301,6 +309,8 @@ async function firebaseStore() {
     },
     // the admin hands the group to another member
     setOwner: (gid, uid) => fs.updateDoc(g(gid), { owner: uid }),
+    // ⏳ the next outing, kept on the group card so the home page can count down without opening the group
+    setNext: (gid, next) => fs.updateDoc(g(gid), { next }),
     // 🙋 who's coming: one doc per person; no answer = no doc
     setRsvp: (gid, name, v) => v ? fs.setDoc(fs.doc(sub(gid, 'rsvp'), name), { v, ts: Date.now() }) : fs.deleteDoc(fs.doc(sub(gid, 'rsvp'), name)),
     // 🔐 joining needs the admin's OK: a request doc per person (named by uid), the admin lets them in
@@ -320,6 +330,7 @@ async function firebaseStore() {
     // Everything the account keeps outside groups, then the Google sign-in itself.
     // (Leaving the groups happens before this, in the app.)
     async deleteAccount(uid) {
+      const fm = await getFm();
       if (fm) await fm.deleteToken(fm.getMessaging(fapp)).catch(() => {});
       for (const d of (await fs.getDocs(fs.collection(db, 'users', uid, 'push'))).docs) await fs.deleteDoc(d.ref);
       await fs.deleteDoc(fs.doc(db, 'users', uid));
@@ -330,6 +341,8 @@ async function firebaseStore() {
         await fa.reauthenticateWithPopup(auth.currentUser, new fa.GoogleAuthProvider());
         await fa.deleteUser(auth.currentUser);
       }
+      await wipeLocal();
+      setTimeout(() => location.reload(), 1500); // the cleared data store can't be reused without a fresh start
     },
     // The creator takes someone out: off the member list, onto the kept-out list, and their round stuff cleared.
     async kick(gid, uid, name) {
@@ -383,8 +396,9 @@ async function firebaseStore() {
     sendAI: (gid, msg) => fs.setDoc(fs.doc(sub(gid, 'aichat'), msg.id), msg),
     idToken: () => auth.currentUser?.getIdToken() ?? null,
     async enablePush(uid, vapidKey) {
+      const fm = await getFm();
       if (!fm || !(await fm.isSupported().catch(() => false))) return false;
-      const reg = await navigator.serviceWorker.register('firebase-messaging-sw.js');
+      const reg = await navigator.serviceWorker.register('firebase-messaging-sw.js', { updateViaCache: 'none' });
       const token = await fm.getToken(fm.getMessaging(fapp), { vapidKey, serviceWorkerRegistration: reg });
       if (!token) return false;
       await fs.setDoc(fs.doc(db, 'users', uid, 'push', token), { token, ts: Date.now() });
@@ -392,6 +406,7 @@ async function firebaseStore() {
     },
     // this phone stops getting notifications: forget its token here and at Google
     async disablePush(uid, vapidKey) {
+      const fm = await getFm();
       if (!fm) return;
       const reg = await navigator.serviceWorker.getRegistration();
       const msg = fm.getMessaging(fapp);
@@ -400,11 +415,12 @@ async function firebaseStore() {
       await fm.deleteToken(msg).catch(() => {});
     },
     async currentToken(vapidKey) {
+      const fm = await getFm();
       if (!fm) return null;
       const reg = await navigator.serviceWorker.getRegistration();
       return reg ? fm.getToken(fm.getMessaging(fapp), { vapidKey, serviceWorkerRegistration: reg }) : null;
     },
-    onForegroundPush(cb) { if (fm) fm.isSupported().then(ok => ok && fm.onMessage(fm.getMessaging(fapp), m => cb(m.data || {}))).catch(() => {}); },
+    onForegroundPush(cb) { getFm().then(fm => fm && fm.isSupported().then(ok => ok && fm.onMessage(fm.getMessaging(fapp), m => cb(m.data || {})))).catch(() => {}); },
     unvote: (gid, member, optId) => fs.setDoc(fs.doc(sub(gid, 'votes'), member), { [optId]: fs.deleteField() }, { merge: true }),
     react: (gid, msg, name, e) => e
       ? fs.setDoc(fs.doc(sub(gid, 'reacts'), msg + '__' + name), { msg, e, ts: Date.now() })
@@ -422,8 +438,8 @@ async function firebaseStore() {
     // merge, never a default status: a spin patch must not knock a live round back to the lobby
     setRound: (gid, patch) => fs.setDoc(fs.doc(db, 'groups', gid, 'round', 'state'), patch, { merge: true }),
     setProfile: (gid, member, prof) => fs.setDoc(fs.doc(sub(gid, 'profiles'), member), prof),
-    setHidden: (gid, hid, { tags, budget, born }) => (tags.length || budget < 4 /* 4 = whatever */ || born)
-      ? fs.setDoc(fs.doc(sub(gid, 'hidden'), hid), { tags, budget, born, ts: Date.now() })
+    setHidden: (gid, hid, { tags, budget, born, sched = '' }) => (tags.length || budget < 4 /* 4 = whatever */ || born || sched)
+      ? fs.setDoc(fs.doc(sub(gid, 'hidden'), hid), { tags, budget, born, ...(sched ? { sched } : {}), ts: Date.now() })
       : fs.deleteDoc(fs.doc(sub(gid, 'hidden'), hid)),
     setBring: (gid, name, items) => fs.setDoc(fs.doc(sub(gid, 'bring'), name), { items, ts: Date.now() }),
     setRide: (gid, name, ride) => ride ? fs.setDoc(fs.doc(sub(gid, 'rides'), name), { ...ride, ts: Date.now() }) : fs.deleteDoc(fs.doc(sub(gid, 'rides'), name)),
