@@ -315,8 +315,13 @@ service cloud.firestore {
       match /info/{doc} {
         allow read: if member();
         allow write: if member() && doc == 'state'
-          && request.resource.data.keys().hasOnly(['region', 'meet', 'deck', 'repeat', 'ts'])
+          && request.resource.data.keys().hasOnly(['region', 'meet', 'deck', 'repeat', 'pin', 'ts'])
           && (!('deck' in request.resource.data) || request.resource.data.deck in [10, 15, 25])
+          // 📌 the chat's pinned message (a copy of its text, so it shows even after it scrolls out)
+          && (!('pin' in request.resource.data) || request.resource.data.pin == null || (request.resource.data.pin is map
+              && request.resource.data.pin.keys().hasOnly(['id', 'text', 'from', 'by', 'ts'])
+              && shortStr(request.resource.data.pin.id, 20) && shortStr(request.resource.data.pin.text, 200)
+              && optStr(request.resource.data.pin.from, 34) && optStr(request.resource.data.pin.by, 34)))
           && (!('region' in request.resource.data) || request.resource.data.region in ['', 'north', 'haifa', 'sharon', 'center', 'jerusalem', 'shfela', 'south', 'eilat'])
           && (!('meet' in request.resource.data) || optStr(request.resource.data.meet, 40));
       }

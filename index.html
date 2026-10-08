@@ -34,16 +34,16 @@
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800;900&display=swap" onload="this.onload=null;this.rel='stylesheet'">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800;900&display=swap" rel="stylesheet"></noscript>
 <!-- every code file the page needs, fetched together instead of one after another (bump.py stamps the versions) -->
-<link rel="modulepreload" href="app.js?v=20261009003418">
-<link rel="modulepreload" href="store.js?v=20261009003418">
-<link rel="modulepreload" href="firebase-config.js?v=20261009003418">
-<link rel="modulepreload" href="api-config.js?v=20261009003418">
-<link rel="modulepreload" href="split.js?v=20261009003418">
-<link rel="modulepreload" href="ideas.js?v=20261009003418">
-<link rel="modulepreload" href="fx.js?v=20261009003418">
-<link rel="modulepreload" href="plan-data.js?v=20261009003418">
-<link rel="modulepreload" href="explain.js?v=20261009003418">
-<link rel="modulepreload" href="tags.js?v=20261009003418">
+<link rel="modulepreload" href="app.js?v=20261009003747">
+<link rel="modulepreload" href="store.js?v=20261009003747">
+<link rel="modulepreload" href="firebase-config.js?v=20261009003747">
+<link rel="modulepreload" href="api-config.js?v=20261009003747">
+<link rel="modulepreload" href="split.js?v=20261009003747">
+<link rel="modulepreload" href="ideas.js?v=20261009003747">
+<link rel="modulepreload" href="fx.js?v=20261009003747">
+<link rel="modulepreload" href="plan-data.js?v=20261009003747">
+<link rel="modulepreload" href="explain.js?v=20261009003747">
+<link rel="modulepreload" href="tags.js?v=20261009003747">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js">
@@ -987,6 +987,14 @@
   .sched-add .timein { width: auto; min-width: 96px; }
   .sched-chip { display: inline-flex; align-items: center; gap: 6px; }
   .sched-x { font-size: 16px; line-height: 1; padding: 0 2px; color: inherit; opacity: .8; }
+  .pinbar { display: none; }
+  .pinbar.on { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; padding: 8px 10px; border-radius: 14px; background: var(--accent-soft); }
+  .pin-txt { flex: 1; min-width: 0; display: flex; gap: 6px; text-align: right; font-size: 14px; color: var(--ink); }
+  .pin-txt > span:last-child { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .pin-x { font-size: 20px; line-height: 1; padding: 0 4px; color: var(--muted); }
+  .reactpick .pinpick { border-inline-start: 1px solid var(--line); padding-inline-start: 6px; }
+  .msg.flash { animation: pinflash 1.2s ease; }
+  @keyframes pinflash { 0%, 100% { box-shadow: none; } 30% { box-shadow: 0 0 0 3px var(--accent); } }
   .tt-list { display: grid; gap: 4px; margin: 6px 0 14px; font-size: 15px; }
   .schedhint { display: grid; gap: 4px; margin: 0 0 10px; padding: 10px 12px; border-radius: 14px; background: var(--accent-soft); font-size: 14px; }
   .waitbox { margin: 0 auto 10px; max-width: 420px; padding: 14px 16px; border-radius: 16px; background: var(--accent-soft); color: var(--ink); text-align: center; font-weight: 700; }
@@ -1072,6 +1080,6 @@
 <div id="app"></div>
 <canvas id="confetti"></canvas>
 <div class="toast" id="toast"></div>
-<script type="module" src="app.js?v=20261009003418"></script>
+<script type="module" src="app.js?v=20261009003747"></script>
 </body>
 </html>

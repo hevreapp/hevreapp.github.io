@@ -1,10 +1,10 @@
-import { store, isLive, newId, newCode } from './store.js?v=20261009003418';
-import { balances, transfers, shekels } from './split.js?v=20261009003418';
-import { packs } from './ideas.js?v=20261009003418';
-import { confetti, buzz, CARD_HUES } from './fx.js?v=20261009003418';
-import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261009003418';
-import { EXPLAIN } from './explain.js?v=20261009003418';
-import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261009003418';
+import { store, isLive, newId, newCode } from './store.js?v=20261009003747';
+import { balances, transfers, shekels } from './split.js?v=20261009003747';
+import { packs } from './ideas.js?v=20261009003747';
+import { confetti, buzz, CARD_HUES } from './fx.js?v=20261009003747';
+import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261009003747';
+import { EXPLAIN } from './explain.js?v=20261009003747';
+import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261009003747';
 
 // The always-on server (AI + notifications). Fire and forget: the site works the same without it.
 async function callApi(path, body) {
@@ -44,7 +44,7 @@ function uaShort() {
 }
 addEventListener('error', e => report(e.error || { message: e.message }, 'קוד'));
 addEventListener('unhandledrejection', e => report(e.reason, 'קוד'));
-import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261009003418';
+import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261009003747';
 
 const root = document.getElementById('app');
 // Same falsy-skipping as h(), so `cond && el` works at the top level too.
@@ -1713,9 +1713,11 @@ function chatTab(me) {
     send.onclick = go;
     input.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go(); } };
     input.oninput = () => { input.style.height = ''; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; };
-    chatView = { gid, wrap: h('div', { class: 'chat' }, list, composer, h('div', { class: 'chatbar' }, pollBtn, input, send)), list, input, count: -1 };
+    const pinBar = h('div', { class: 'pinbar' });
+    chatView = { gid, wrap: h('div', { class: 'chat' }, pinBar, list, composer, h('div', { class: 'chatbar' }, pollBtn, input, send)), list, input, pinBar, count: -1 };
   }
   const { list } = chatView;
+  drawPin(chatView.pinBar, list);
   const msgs = state.chat || [];
   // redraw on a new message or a new poll vote
   const sig = msgs.length + '|' + Object.entries(state.pollvotes || {}).map(([k, v]) => k + v.opt).sort().join()
@@ -1729,7 +1731,7 @@ function chatTab(me) {
       const day = dayLabel(m.ts);
       if (day !== lastDay) { items.push(h('div', { class: 'chatday' }, day)); lastDay = day; lastFrom = ''; }
       const mine = m.uid === user.uid;
-      const bubble = h('div', { class: 'msg' + (mine ? ' mine' : '') + (m.from === lastFrom ? ' cont' : '') },
+      const bubble = h('div', { class: 'msg' + (mine ? ' mine' : '') + (m.from === lastFrom ? ' cont' : ''), 'data-id': m.id },
         !mine && m.from !== lastFrom && h('span', { class: 'from', style: `color:hsl(${hue(m.from)} 70% 50%)` }, m.from),
         m.kind === 'poll' ? pollBubble(m, me) : h('span', { class: 'txt' }, m.text),
         h('span', { class: 'time' }, hhmm(m.ts)),
@@ -2603,10 +2605,14 @@ function holdToReact(el, m, me) {
     document.querySelectorAll('.reactpick').forEach(x => x.remove());
     buzz(10);
     const mineNow = state.reacts?.[m.id + '__' + me]?.e;
+    const pinned = state.info?.pin?.id === m.id;
     const pick = h('div', { class: 'reactpick' }, REACTS.map(e => h('button', {
       class: mineNow === e ? 'on' : '',
       onclick: ev => { ev.stopPropagation(); pick.remove(); store.react(gid, m.id, me, mineNow === e ? null : e); },
-    }, e)));
+    }, e)), h('button', {
+      class: 'pinpick', 'aria-label': pinned ? 'להוריד את הנעיצה' : 'לנעוץ למעלה', title: pinned ? 'להוריד את הנעיצה' : 'לנעוץ למעלה',
+      onclick: ev => { ev.stopPropagation(); pick.remove(); pinned ? unpin() : pinMsg(m, me); },
+    }, pinned ? '📍' : '📌'));
     el.append(pick);
     setTimeout(() => addEventListener('pointerdown', function off(ev) {
       if (!pick.contains(ev.target)) { pick.remove(); removeEventListener('pointerdown', off); }
@@ -2615,6 +2621,37 @@ function holdToReact(el, m, me) {
   el.onpointerdown = () => { t = setTimeout(open, 450); };
   el.onpointerup = el.onpointerleave = el.onpointercancel = () => clearTimeout(t);
   el.oncontextmenu = e => { e.preventDefault(); open(); };
+}
+
+/* ---------- 📌 one pinned message on top of the chat, for everyone ---------- */
+
+async function pinMsg(m, me) {
+  buzz(15);
+  try {
+    await store.setInfo(gid, { pin: { id: m.id, text: String(m.text || '').slice(0, 200), from: String(m.from || '').slice(0, 34), by: me, ts: Date.now() }, ts: Date.now() });
+    toast('📌 ננעץ למעלה בצ\'אט');
+  } catch (e) { report(e, 'נעיצה'); toast('משהו נתקע, תנסה שוב'); }
+}
+async function unpin() {
+  try { await store.setInfo(gid, { pin: null, ts: Date.now() }); toast('הנעיצה ירדה'); }
+  catch (e) { report(e, 'נעיצה'); toast('משהו נתקע, תנסה שוב'); }
+}
+function drawPin(bar, list) {
+  const p = state.info?.pin;
+  if (!p) { bar.replaceChildren(); bar.classList.remove('on'); return; }
+  bar.classList.add('on');
+  bar.replaceChildren(
+    h('button', {
+      class: 'pin-txt', title: 'לקפוץ להודעה',
+      onclick: () => {
+        const el = list.querySelector(`[data-id="${CSS.escape(p.id)}"]`);
+        if (!el) return toast('ההודעה כבר ישנה מדי, היא לא בצ\'אט');
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200);
+      },
+    }, h('span', null, '📌'), h('span', null, h('b', null, p.from ? p.from + ': ' : ''), p.text)),
+    h('button', { class: 'pin-x', 'aria-label': 'להוריד את הנעיצה', onclick: unpin }, '×'),
+  );
 }
 
 /* ---------- 7. quick polls in the chat ---------- */
