@@ -1,10 +1,10 @@
-import { store, isLive, newId, newCode } from './store.js?v=20261008235954';
-import { balances, transfers, shekels } from './split.js?v=20261008235954';
-import { packs } from './ideas.js?v=20261008235954';
-import { confetti, buzz, CARD_HUES } from './fx.js?v=20261008235954';
-import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261008235954';
-import { EXPLAIN } from './explain.js?v=20261008235954';
-import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261008235954';
+import { store, isLive, newId, newCode } from './store.js?v=20261009001305';
+import { balances, transfers, shekels } from './split.js?v=20261009001305';
+import { packs } from './ideas.js?v=20261009001305';
+import { confetti, buzz, CARD_HUES } from './fx.js?v=20261009001305';
+import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261009001305';
+import { EXPLAIN } from './explain.js?v=20261009001305';
+import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261009001305';
 
 // The always-on server (AI + notifications). Fire and forget: the site works the same without it.
 async function callApi(path, body) {
@@ -44,7 +44,7 @@ function uaShort() {
 }
 addEventListener('error', e => report(e.error || { message: e.message }, 'קוד'));
 addEventListener('unhandledrejection', e => report(e.reason, 'קוד'));
-import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261008235954';
+import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261009001305';
 
 const root = document.getElementById('app');
 // Same falsy-skipping as h(), so `cond && el` works at the top level too.
@@ -2304,6 +2304,7 @@ function schedPanel(mine, save) {
       onclick: () => { schedDay = wd; render(); },
     }, h('span', { class: 'sched-dn' }, dn), bar(s.w[wd])))),
     h('div', { class: 'sched-scale' }, h('span', null, '08:00'), h('span', null, '16:00'), h('span', null, '24:00')),
+    isLive && API && h('button', { class: 'glassbtn wide', style: 'margin-top:12px', onclick: () => pickTimetable(s, put) }, '📷 לצלם מערכת שעות, וה-AI יסמן'),
     h('label', null, `יום ${DAYN[schedDay]}: מתי אתה תפוס?`),
     h('div', { class: 'chips' },
       pairs(s.w[schedDay]).map(([a, b]) => chip(`${hm(a)}–${hm(b)}`, () => {
@@ -2333,6 +2334,44 @@ function schedPanel(mine, save) {
       ? '🙈 החבר\'ה לא רואים את הלו"ז שלך, הוא רק עוזר לחשב מתי כולם פנויים'
       : '👀 החבר\'ה רואים מתי אתה תפוס (בלי פירוט למה). אפשר להסתיר למעלה ב"רק אני"'),
   );
+}
+
+// 📷 A photo or screenshot of the school timetable → the AI reads school hours per day → you check, then they're marked.
+// On each of those days, whatever overlapped the school hours (like the 🏫 button's 8-14) gives way to the real times.
+let timetableBusy = false;
+function pickTimetable(s, put) {
+  const inp = h('input', { type: 'file', accept: 'image/*' });
+  inp.onchange = () => { if (inp.files[0]) readTimetable(inp.files[0], s, put); };
+  inp.click();
+}
+async function readTimetable(file, s, put) {
+  if (timetableBusy) return;
+  timetableBusy = true;
+  toast('🗓️ קורא את המערכת...');
+  try {
+    const r = await callApi('/timetable', { image: await shrinkImage(file, 1600) });
+    if (!r) return toast('משהו נתקע, תנסה שוב');
+    if (r.error) return toast(r.error);
+    const DAYN = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+    openSheet('מערכת שעות', close => [
+      h('div', { style: 'font-size:44px' }, '🗓️'),
+      h('h3', { style: 'margin:6px 0 4px' }, 'זה מה שקראתי'),
+      r.guessed && h('p', { class: 'muted small', style: 'margin:0 0 6px' }, 'במערכת לא היו שעות, אז הערכתי לפי מספרי השיעורים. כדאי לבדוק'),
+      h('div', { class: 'tt-list' }, r.days.map(d => h('div', null, h('b', null, `יום ${DAYN[d.day]}`), ` ${hm(d.from)} עד ${hm(d.to)}`))),
+      h('button', { class: 'btn wide', onclick: () => {
+        const w = { ...s.w };
+        for (const d of r.days) {
+          const keep = pairs(w[d.day] || []).filter(([a, b]) => b <= d.from || a >= d.to);
+          w[d.day] = mergeRanges([...keep, [d.from, d.to]]).flat();
+        }
+        put({ ...s, w });
+        close();
+        toast(`✅ סימנתי ${r.days.length} ימים בלו"ז`);
+      } }, '✅ לסמן בלו"ז'),
+      h('button', { class: 'linkbtn', onclick: close }, 'ביטול'),
+    ]);
+  } catch (e) { report(e, 'מערכת שעות'); toast('לא הצלחתי לקרוא את התמונה'); }
+  finally { timetableBusy = false; }
 }
 
 // 🗓️ in "when?": the next days when everyone who filled a schedule is free in the evening
