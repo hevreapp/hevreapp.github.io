@@ -1,10 +1,10 @@
-import { store, isLive, newId, newCode } from './store.js?v=20261009002419';
-import { balances, transfers, shekels } from './split.js?v=20261009002419';
-import { packs } from './ideas.js?v=20261009002419';
-import { confetti, buzz, CARD_HUES } from './fx.js?v=20261009002419';
-import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261009002419';
-import { EXPLAIN } from './explain.js?v=20261009002419';
-import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261009002419';
+import { store, isLive, newId, newCode } from './store.js?v=20261009003418';
+import { balances, transfers, shekels } from './split.js?v=20261009003418';
+import { packs } from './ideas.js?v=20261009003418';
+import { confetti, buzz, CARD_HUES } from './fx.js?v=20261009003418';
+import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261009003418';
+import { EXPLAIN } from './explain.js?v=20261009003418';
+import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261009003418';
 
 // The always-on server (AI + notifications). Fire and forget: the site works the same without it.
 async function callApi(path, body) {
@@ -44,7 +44,7 @@ function uaShort() {
 }
 addEventListener('error', e => report(e.error || { message: e.message }, 'קוד'));
 addEventListener('unhandledrejection', e => report(e.reason, 'קוד'));
-import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261009002419';
+import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261009003418';
 
 const root = document.getElementById('app');
 // Same falsy-skipping as h(), so `cond && el` works at the top level too.
@@ -658,8 +658,32 @@ async function renderStats() {
     ),
     bars('🔥 קבוצות פעילות, 14 ימים', 'groups'),
     bars('💬 הודעות ביום', 'chats'),
+    rulesPanel(),
     h('p', { class: 'muted small', style: 'text-align:center' }, 'הספירה של הפעילות התחילה ב-8.10.2026'),
   );
+}
+
+// 🔒 publishing the Firestore rules from the repo through the server (no pasting into the console)
+function rulesPanel() {
+  const status = h('p', { class: 'muted', style: 'margin:0 0 10px' }, 'בודק...');
+  const issues = h('div', { class: 'errs' });
+  const go = h('button', { class: 'btn wide', disabled: true }, '🔒 לעדכן חוקים');
+  callApi('/rules', { check: true }).then(r => {
+    if (!r?.ok) { status.textContent = r?.error || 'לא הצלחתי לבדוק עכשיו'; go.disabled = false; return; }
+    status.textContent = r.upToDate ? '✅ החוקים באוויר מעודכנים' : '⚠️ יש חוקים חדשים שעוד לא עלו';
+    go.disabled = r.upToDate;
+  });
+  go.onclick = async () => {
+    go.disabled = true;
+    status.textContent = 'מעלה...';
+    issues.replaceChildren();
+    const r = await callApi('/rules', {});
+    if (r?.ok) { status.textContent = r.published ? '✅ החוקים עודכנו' : '✅ החוקים כבר היו מעודכנים'; buzz(30); return; }
+    status.textContent = '❌ ' + (r?.error || 'משהו נתקע, תנסה שוב');
+    issues.replaceChildren(...(r?.issues || []).map(t => h('div', { class: 'err-row' }, h('small', { class: 'mono' }, t))));
+    go.disabled = false;
+  };
+  return h('div', { class: 'panel' }, h('h3', null, '🔒 חוקי האבטחה'), status, go, issues);
 }
 
 // Unread chat count for the home list (local mode only knows the last message; that's enough for a dot).
