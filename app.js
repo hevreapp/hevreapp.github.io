@@ -1,10 +1,10 @@
-import { store, isLive, newId, newCode } from './store.js?v=20261009001305';
-import { balances, transfers, shekels } from './split.js?v=20261009001305';
-import { packs } from './ideas.js?v=20261009001305';
-import { confetti, buzz, CARD_HUES } from './fx.js?v=20261009001305';
-import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261009001305';
-import { EXPLAIN } from './explain.js?v=20261009001305';
-import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261009001305';
+import { store, isLive, newId, newCode } from './store.js?v=20261009002419';
+import { balances, transfers, shekels } from './split.js?v=20261009002419';
+import { packs } from './ideas.js?v=20261009002419';
+import { confetti, buzz, CARD_HUES } from './fx.js?v=20261009002419';
+import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261009002419';
+import { EXPLAIN } from './explain.js?v=20261009002419';
+import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261009002419';
 
 // The always-on server (AI + notifications). Fire and forget: the site works the same without it.
 async function callApi(path, body) {
@@ -44,7 +44,7 @@ function uaShort() {
 }
 addEventListener('error', e => report(e.error || { message: e.message }, 'קוד'));
 addEventListener('unhandledrejection', e => report(e.reason, 'קוד'));
-import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261009001305';
+import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261009002419';
 
 const root = document.getElementById('app');
 // Same falsy-skipping as h(), so `cond && el` works at the top level too.
@@ -2125,7 +2125,10 @@ function planPanel(me, what) {
     base.trip && mode === 'car' && ridesPanel(me),
 
     h('div', { class: 'plan-btns' },
-      isLive && API && h('button', { class: 'btn wide ai', onclick: () => aiPlanSheet(me, what) }, '🤖 תכנן לנו'),
+      isLive && API && h('button', {
+        class: 'btn wide ai',
+        onclick: () => aiPlanSheet(me, what, { day, iso: nextIso, steps, bring: base.bring, meet: info.meet || '', mode, travel, trip: base.trip }),
+      }, '🤖 תכנן לנו'),
       base.search && h('button', {
         class: 'glassbtn wide', onclick: () => nearMe(pos => pos ? mapsSearchAt(base.search, pos) : mapsSearch(dest)),
       }, `🔎 ${base.search} לידי`),
@@ -2175,25 +2178,49 @@ function planPanel(me, what) {
 
 
 // 🤖 the AI writes a full plan for the picked card: times, rough cost each, what to bring, tips (not stored)
-async function aiPlanSheet(me, what) {
+async function aiPlanSheet(me, what, p) {
   buzz(10);
-  const body = h('p', { class: 'aiplan' }, '🤖 מתכנן לכם...');
-  let text = '';
+  const coming = state.group.members.filter(m => state.rsvp?.[m]?.v === 'yes');
+  // exactly what the plan shows: day, where, how, the timeline, who's coming
+  const header = [
+    `🗺️ ${what.emoji || '✨'} ${what.text}`,
+    p.day ? `📅 ${p.day}` : '📅 עוד לא נבחר יום (מסמנים ב"מתי?")',
+    p.trip ? `📍 נקודת מפגש: ${p.meet || 'עוד לא נקבעה'} · ${p.mode === 'car' ? '🚗 באוטו' : '🚌 בתחבורה ציבורית'}` : '🏠 אצל מישהו',
+    ...p.steps.map(([e, l, t]) => `${t} ${e} ${l}`),
+    p.bring.length ? `🎒 להביא: ${p.bring.join(', ')}` : null,
+    coming.length ? `🙋 באים: ${coming.join(', ')}` : null,
+  ].filter(Boolean).join('\n');
+  const body = h('p', { class: 'aiplan' }, header + '\n\n🤖 מוסיף עלות, ציוד וטיפים...');
+  let full = '';
   const send = h('button', { class: 'glassbtn wide', disabled: true, onclick: async () => {
-    const id = newId(12);
-    await store.sendChat(gid, { id, uid: user.uid, from: me, text: ('🤖 התוכנית של ה-AI ל' + what.text + ':\n' + text).slice(0, 500), ts: Date.now() });
-    callApi('/notify', { gid, type: 'chat', id });
+    // a chat message holds 500 characters: longer plans go out in a few, line by line
+    const parts = [];
+    for (const line of full.split('\n')) {
+      if (parts.length && (parts.at(-1) + '\n' + line).length <= 500) parts[parts.length - 1] += '\n' + line;
+      else parts.push(line.slice(0, 500));
+    }
+    const t = Date.now();
+    let first = null;
+    for (const [i, text] of parts.entries()) {
+      const id = newId(12);
+      first ||= id;
+      await store.sendChat(gid, { id, uid: user.uid, from: me, text, ts: t + i });
+    }
+    callApi('/notify', { gid, type: 'chat', id: first });
     close(); toast("נשלח לצ'אט 💬");
   } }, "💬 לשלוח לצ'אט");
-  const close = openSheet('תוכנית מה-AI', close => [
-    h('h3', { style: 'margin:0 0 10px' }, `🤖 ${what.emoji || ''} ${what.text}`),
+  const close = openSheet('התוכנית', close => [
+    h('h3', { style: 'margin:0 0 10px' }, '🗺️ התוכנית שלכם'),
     body, send,
     h('button', { class: 'linkbtn', onclick: close }, 'סגור'),
   ]);
-  const r = await callApi('/plan', { gid, optId: what.id });
-  text = r?.text || 'לא הצלחתי לתכנן עכשיו, תנסו שוב עוד רגע';
-  body.textContent = text;
-  send.disabled = !r?.text;
+  const r = await callApi('/plan', {
+    gid, optId: what.id, day: p.iso || '', steps: p.steps.map(([e, l, t]) => [t, e, l]), bring: p.bring, mode: p.mode, travel: p.travel, trip: p.trip,
+  });
+  const extra = r?.text && !r.failed ? r.text.trim() : '';
+  full = header + (extra ? '\n\n' + extra : '');
+  body.textContent = full + (extra ? '' : '\n\n' + (r?.text || 'ה-AI לא זמין עכשיו, תנסו שוב עוד רגע'));
+  send.disabled = false;
 }
 
 // 🎲 who drives / orders / pays: picked at random, then posted to the chat so nobody can quietly re-roll
