@@ -2,8 +2,8 @@
 // what to bring, and what to search for on a map. Mostly derived from the idea's tags,
 // with overrides where the tags would guess wrong.
 
-import { packs } from './ideas.js?v=20261008143426';
-import { tagsOf } from './tags.js?v=20261008143426';
+import { packs } from './ideas.js?v=20261008145109';
+import { tagsOf } from './tags.js?v=20261008145109';
 
 export const REGIONS = [
   ['north', 'צפון'], ['haifa', 'חיפה והקריות'], ['sharon', 'שרון'], ['center', 'מרכז'],

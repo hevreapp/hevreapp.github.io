@@ -5,6 +5,18 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>חבר'ה</title>
 <meta name="description" content="מחליטים מה עושים ומי חייב למי בלי לריב בקבוצה">
+<!-- the card WhatsApp / Telegram / Instagram show for a shared link -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="חבר'ה">
+<meta property="og:title" content="חבר'ה">
+<meta property="og:description" content="מחליטים ביחד מה עושים ומי חייב למי. סוויפ על רעיונות, צ'אט לקבוצה ו-AI שעוזר לתכנן">
+<meta property="og:url" content="https://hevreapp.github.io/">
+<meta property="og:image" content="https://hevreapp.github.io/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="חבר'ה: קלפים של רעיונות ליציאה עם החברים">
+<meta property="og:locale" content="he_IL">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#F4F4F7">
 <!-- The page has its own night mode, declared the standard way (color-scheme + a prefers-color-scheme
      block below). Samsung Internet only leaves a page's colours alone when it finds that; otherwise it
@@ -921,6 +933,20 @@
   .chatseg { margin-bottom: 10px; }
   .pushbtn { width: 38px; height: 38px; border-radius: 12px; font-size: 18px; background: var(--surface); border: 1px solid var(--line); }
   .pushbtn.on { border-color: var(--accent); }
+  a.pushbtn { display: grid; place-items: center; text-decoration: none; }
+  .glassbtn.bell { width: 44px; padding: 0; flex: none; }
+  .mutedmark { font-size: 12px; opacity: .7; }
+  .footlinks { display: flex; justify-content: center; gap: 18px; margin: 22px 0 8px; font-size: 13px; }
+  .footlinks a, .footlinks button { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; font-size: 13px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .stat { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px; border-radius: 16px; background: var(--soft); text-align: center; }
+  .stat-em { font-size: 20px; }
+  .stat b { font-size: 24px; font-weight: 800; }
+  .stat small { color: var(--muted); font-size: 12px; }
+  .bars { display: flex; align-items: flex-end; gap: 4px; height: 140px; direction: ltr; }
+  .bar { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
+  .bar i { display: block; width: 100%; min-height: 2px; border-radius: 6px 6px 2px 2px; background: var(--accent); }
+  .bar small { font-size: 9px; color: var(--muted); }
   .pushnudge { display: block; width: 100%; margin-bottom: 10px; padding: 10px 14px; border-radius: 14px; font-weight: 700; font-size: 14px;
     background: var(--accent-soft); color: var(--accent); }
   .aihello { align-self: stretch; display: grid; gap: 4px; text-align: center; padding: 14px; margin-bottom: 8px; border-radius: 18px; background: var(--accent-soft); }
@@ -992,6 +1018,6 @@
 <div id="app"></div>
 <canvas id="confetti"></canvas>
 <div class="toast" id="toast"></div>
-<script type="module" src="app.js?v=20261008143426"></script>
+<script type="module" src="app.js?v=20261008145109"></script>
 </body>
 </html>

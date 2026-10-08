@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>פרטיות · חבר'ה</title>
+<meta name="description" content="מה האתר חבר'ה שומר, מי רואה את זה, ואיך מוחקים">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F4F4F7; --ink: #0B0B10; --muted: #6B6B76; --line: #E4E4EA; --surface: #FFFFFF; --accent: #3D5AFE; --soft: #F1F1F5;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0E0E13; --ink: #F2F2F6; --muted: #9C9CA8; --line: #2A2A33; --surface: #17171D; --accent: #6E80FF; --soft: #202028;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.65 Rubik, system-ui, sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 24px 16px 60px; }
+  .back { display: inline-block; margin-bottom: 18px; color: var(--accent); font-weight: 700; text-decoration: none; }
+  h1 { font-size: 32px; font-weight: 800; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 22px; }
+  section { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 16px 18px; margin-bottom: 12px; }
+  h2 { font-size: 19px; font-weight: 800; margin: 0 0 6px; }
+  p { margin: 6px 0; }
+  ul { margin: 6px 0; padding-inline-start: 20px; }
+  li { margin: 4px 0; }
+  b { font-weight: 700; }
+  .note { background: var(--soft); border-radius: 14px; padding: 10px 14px; margin-top: 10px; }
+  .muted { color: var(--muted); font-size: 14px; }
+</style>
+<script>
+  // same choice as the main site (day/night switch), so the page doesn't flash the other theme
+  try { if (localStorage.getItem('hevre:theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch {}
+</script>
+</head>
+<body>
+<main>
+  <a class="back" href="./">→ חזרה לחבר'ה</a>
+  <h1>🔒 פרטיות</h1>
+  <p class="sub">מה האתר שומר, מי רואה את זה, ואיך מוחקים. בלי אותיות קטנות.</p>
+
+  <section>
+    <h2>בקצרה</h2>
+    <ul>
+      <li>שומרים רק מה שצריך כדי שהאתר יעבוד.</li>
+      <li>אין פרסומות, לא מוכרים מידע לאף אחד ואין כלי מעקב.</li>
+      <li>מה שקורה בקבוצה רואים רק החברים שבה.</li>
+      <li>אפשר למחוק את החשבון בכל רגע בכפתור "למחוק את החשבון שלי" בדף הקבוצות.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>👤 החשבון שלכם</h2>
+    <p>נכנסים עם חשבון Google. גוגל (Firebase) שומרת את השם, המייל והתמונה של החשבון כדי שתוכלו להתחבר. <b>אף אחד באתר לא רואה את המייל שלכם.</b></p>
+    <p>באתר עצמו נשמרים: השם שבחרתם, תאריך הלידה, מה אתם אוהבים ומה פחות, מגבלות, הערה, תקציב, וקבוצות שהשתקתם.</p>
+  </section>
+
+  <section>
+    <h2>👀 מי רואה מה</h2>
+    <ul>
+      <li><b>השם ומה אתם אוהבים</b>: החברים בקבוצות שלכם.</li>
+      <li><b>מגבלות, הערה ותקציב</b>: רק אם בחרתם "👀 החבר'ה שלי". אם בחרתם "🙈 רק אני", אף אחד לא רואה אותם. הם רק עוזרים לאתר לסמן קלפים בתור "לא מתאים למישהו בקבוצה", בלי לומר למי.</li>
+      <li><b>תאריך הלידה</b>: רק אתם. הקבוצה מקבלת שנה וחודש בלבד, כדי לחשב גיל.</li>
+      <li><b>צ'אט, קלפים, הצבעות, תוכניות והוצאות</b>: רק החברים באותה קבוצה.</li>
+    </ul>
+    <p class="note">מנהל הקבוצה (מי שפתח אותה, או מי שקיבל ממנו את הניהול) יכול להוציא אנשים מהקבוצה ולמחוק אותה.</p>
+  </section>
+
+  <section>
+    <h2>🤖 ה-AI</h2>
+    <p>ה-AI הוא Gemini של גוגל. מה נשלח אליו:</p>
+    <ul>
+      <li><b>שאלה ל-AI</b>: השאלה, השמות בקבוצה, הקלפים, התוכנית, ו-20 ההודעות האחרונות בצ'אט ה-AI.</li>
+      <li><b>"🤖 תציע לנו"</b>: מה הקבוצה אוהבת, מגבלות, טווח גילאים ותקציב. <b>בלי שמות.</b></li>
+      <li><b>"🤖 מה פספסתי?"</b>: ההודעות האחרונות בצ'אט, כולל השמות של מי שכתב אותן.</li>
+    </ul>
+    <p class="note">האתר משתמש בגרסה החינמית של Gemini. לפי התנאים של גוגל, בגרסה הזאת היא יכולה להשתמש בתוכן כדי לשפר את השירותים שלה, ואנשים אצלה עשויים לקרוא אותו. אז <b>לא לכתוב ל-AI דברים אישיים</b>: כתובות, טלפונים, סיסמאות.</p>
+  </section>
+
+  <section>
+    <h2>🔔 התראות</h2>
+    <p>כשמדליקים התראות, נשמר מזהה של הטלפון כדי שאפשר יהיה לשלוח אליו. כיבוי ההתראות מוחק את המזהה. 🔕 בראש קבוצה משתיק רק אותה.</p>
+  </section>
+
+  <section>
+    <h2>🏢 איפה זה יושב</h2>
+    <ul>
+      <li><b>Google Firebase</b>: החשבונות ומאגר המידע (המאגר בשרתים בתל אביב).</li>
+      <li><b>Google Gemini</b>: ה-AI.</li>
+      <li><b>Cloudflare</b>: השרת הקטן שמפעיל את ה-AI ואת ההתראות.</li>
+      <li><b>GitHub Pages</b>: האתר עצמו. Google Fonts: הגופן.</li>
+    </ul>
+    <p class="muted">כמו כל אתר, השירותים האלה רואים כתובת IP כשנכנסים.</p>
+  </section>
+
+  <section>
+    <h2>🗑️ מחיקה</h2>
+    <ul>
+      <li><b>יציאה מקבוצה</b> מוחקת מהקבוצה את הפרופיל שלכם ואת ההצבעות, ההגעה, ה"מי מביא מה" וה"טרמפים" שלכם.</li>
+      <li><b>"למחוק את החשבון שלי"</b> (בתחתית דף הקבוצות): יוצאים מכל הקבוצות, ונמחקים הפרופיל, תאריך הלידה, ההתראות והחשבון בגוגל-Firebase. קבוצה שאתם לבד בה נמחקת. בקבוצה שאתם מנהלים, הניהול עובר לחבר הבא.</li>
+      <li>הודעות שכתבתם בצ'אט והוצאות שרשמתם נשארות אצל הקבוצה, כמו בוואטסאפ, כי הן חלק מהשיחה ומהחשבון של כולם.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>👶 גיל</h2>
+    <p>האתר פתוח לכל גיל. תאריך הלידה עוזר לסמן יציאות שלא מתאימות לגיל. אם אתם צעירים, כדאי לספר להורים שאתם משתמשים באתר.</p>
+  </section>
+
+  <p class="muted">עודכן ב-8.10.2026</p>
+</main>
+</body>
+</html>

@@ -1,10 +1,10 @@
-import { store, isLive, newId, newCode } from './store.js?v=20261008143426';
-import { balances, transfers, shekels } from './split.js?v=20261008143426';
-import { packs } from './ideas.js?v=20261008143426';
-import { confetti, buzz, CARD_HUES } from './fx.js?v=20261008143426';
-import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261008143426';
-import { EXPLAIN } from './explain.js?v=20261008143426';
-import { API, VAPID_KEY } from './api-config.js?v=20261008143426';
+import { store, isLive, newId, newCode } from './store.js?v=20261008145109';
+import { balances, transfers, shekels } from './split.js?v=20261008145109';
+import { packs } from './ideas.js?v=20261008145109';
+import { confetti, buzz, CARD_HUES } from './fx.js?v=20261008145109';
+import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261008145109';
+import { EXPLAIN } from './explain.js?v=20261008145109';
+import { API, VAPID_KEY } from './api-config.js?v=20261008145109';
 
 // The always-on server (AI + notifications). Fire and forget: the site works the same without it.
 async function callApi(path, body) {
@@ -16,7 +16,7 @@ async function callApi(path, body) {
     return r.ok ? r.json() : null;
   } catch { return null; }
 }
-import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261008143426';
+import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261008145109';
 
 const root = document.getElementById('app');
 // Same falsy-skipping as h(), so `cond && el` works at the top level too.
@@ -116,7 +116,7 @@ function rerender() {
   if (!user) return;
   if (!myName() || !validBorn(userDoc?.born)) return renderName();
   if (!gid && /^#g=/.test(location.hash)) return route(true); // came in through a link, just finished naming
-  gid ? render() : renderHome();
+  gid ? render() : location.hash === '#stats' ? renderStats() : renderHome();
 }
 
 /* ---------- routing ---------- */
@@ -134,7 +134,7 @@ function route(force) {
   if (unwatch) { unwatch(); unwatch = null; }
   unsettle();
   gid = next; state = null; chatView = null;
-  if (!gid) return renderHome();
+  if (!gid) return location.hash === '#stats' ? renderStats() : renderHome();
   app.replaceChildren(h('p', { class: 'empty' }, 'טוען...'));
   unwatch = store.watch(gid, s => { state = s; render(); });
 }
@@ -183,6 +183,7 @@ function renderSignIn() {
         h('h3', { style: 'justify-content:center' }, 'יאללה נכנסים'),
         h('p', { class: 'muted' }, 'משתמש אחד לכל הקבוצות שלך'),
         go, err,
+        h('a', { class: 'linkbtn', href: 'privacy.html' }, '🔒 מה נשמר עליך ומי רואה'),
       ),
     );
   }
@@ -279,6 +280,7 @@ function renderHome() {
     h('div', { class: 'homebar' },
       h('span', { class: 'av', style: `--h:${hue(myName())}` }, [...myName()][0]),
       h('div', { style: 'flex:1' }, h('b', null, 'היי ' + myName()), h('div', { class: 'muted small', style: 'margin:0' }, 'הקבוצות שלך')),
+      ls.get('hevre:siteadmin:' + user.uid, false) && h('a', { class: 'pushbtn', href: '#stats', 'aria-label': 'סטטיסטיקות', title: 'סטטיסטיקות' }, '📊'),
       isLive && pushButton(),
       h('button', { class: 'linkbtn', style: 'margin:0', onclick: () => store.signOut() }, isLive ? 'יציאה' : 'החלף משתמש'),
     ),
@@ -288,7 +290,7 @@ function renderHome() {
           const unread = unreadIn(g.gid, g.lastChat);
           return h('a', { class: 'gcard', href: '#g=' + g.gid, style: `--h:${hue(g.name)};animation-delay:${i * 50}ms` },
             h('span', { class: 'gav' }, [...g.name][0]),
-            h('span', { class: 'gtx' }, h('b', null, g.name), h('small', null, g.members.join(', '))),
+            h('span', { class: 'gtx' }, h('b', null, g.name, isMuted(g.gid) && h('span', { class: 'mutedmark', title: 'בשקט' }, ' 🔕')), h('small', null, g.members.join(', '))),
             unread ? h('span', { class: 'badge' }, unread) : h('span', { class: 'arrow' }, '←'),
             h('button', {
               class: 'gdel', 'aria-label': g.owner === user.uid ? 'למחוק את ' + g.name : 'לצאת מ' + g.name,
@@ -308,24 +310,176 @@ function renderHome() {
       h('div', { class: 'row' }, code, h('button', { class: 'btn', onclick: join }, 'הצטרף')),
       codeErr,
     ),
+    h('div', { class: 'footlinks' },
+      h('a', { href: 'privacy.html' }, '🔒 פרטיות'),
+      h('button', { onclick: deleteAccount }, '🗑️ למחוק את החשבון שלי'),
+    ),
   );
   go.classList.remove('wide');
 }
 
-// The creator deletes the group for everyone; anyone else just leaves it.
+// Anyone can leave. The admin can delete the group for everyone, or hand it to a friend and leave.
 async function removeGroup(g) {
   const mine = g.owner === user.uid;
-  const ok = confirm(mine
-    ? `למחוק את "${g.name}" לכולם?
-הצ'אט, הקלפים, ההוצאות והקופה יימחקו ואי אפשר להחזיר`
-    : `לצאת מ"${g.name}"?
-היא תיעלם מהרשימה שלך, ואפשר לחזור עם הקוד`);
-  if (!ok) return;
+  if (mine && g.memberUids.length > 1) {
+    openSheet('יציאה מהקבוצה', close => [
+      h('div', { style: 'font-size:44px' }, '👑'),
+      h('h3', { style: 'margin:6px 0 4px' }, g.name),
+      h('p', { class: 'muted', style: 'margin:0 0 14px' }, 'אתה המנהל של הקבוצה הזאת. אפשר להעביר אותה לחבר ולצאת, או למחוק אותה לכולם'),
+      h('button', { class: 'btn wide', onclick: () => { close(); pickAdmin(g, () => leave(g)); } }, '👑 להעביר את הניהול ולצאת'),
+      h('button', { class: 'glassbtn wide', onclick: () => { close(); deleteForAll(g); } }, '🗑️ למחוק לכולם'),
+      h('button', { class: 'linkbtn', onclick: close }, 'סגור'),
+    ]);
+    return;
+  }
+  if (mine) return deleteForAll(g);
+  if (confirm(`לצאת מ"${g.name}"?
+היא תיעלם מהרשימה שלך, ואפשר לחזור עם הקוד`)) leave(g);
+}
+async function leave(g) {
+  try { await store.leaveGroup(g.gid, user.uid, g.people[user.uid], userDoc?.hidden?.[g.gid]); toast('יצאת מהקבוצה'); }
+  catch { toast('משהו נתקע, תנסה שוב'); }
+}
+async function deleteForAll(g) {
+  if (!confirm(`למחוק את "${g.name}" לכולם?
+הצ'אט, הקלפים, ההוצאות והקופה יימחקו ואי אפשר להחזיר`)) return;
+  try { await store.deleteGroup(g.gid, g.code); toast('הקבוצה נמחקה'); }
+  catch { toast('משהו נתקע, תנסה שוב'); }
+}
+
+// Pick who gets the crown. then() runs after the handover (e.g. leaving).
+function pickAdmin(g, then) {
+  const others = g.memberUids.filter(u => u !== user.uid);
+  openSheet('להעביר את הניהול', close => [
+    h('div', { style: 'font-size:44px' }, '👑'),
+    h('h3', { style: 'margin:6px 0 4px' }, 'למי להעביר את הניהול?'),
+    h('p', { class: 'muted', style: 'margin:0 0 14px' }, 'המנהל יכול להוציא אנשים מהקבוצה ולמחוק אותה'),
+    h('div', { class: 'chips', style: 'justify-content:center' }, others.map(u => h('button', {
+      class: 'chip big', onclick: async () => {
+        const n = g.people[u];
+        if (!confirm(`להעביר את הניהול ל${n}?`)) return;
+        close();
+        try { await store.setOwner(g.gid, u); toast(`👑 ${n} המנהל עכשיו`); if (then) await then(); }
+        catch { toast('משהו נתקע, תנסה שוב'); }
+      },
+    }, g.people[u]))),
+    h('button', { class: 'linkbtn', onclick: close }, 'ביטול'),
+  ]);
+}
+
+// A small dialog over everything. build(close) returns its contents.
+function openSheet(label, build) {
+  const close = () => { el.classList.add('out'); setTimeout(() => el.remove(), 300); };
+  const el = h('div', { class: 'matchscreen', role: 'dialog', 'aria-label': label }, h('div', { class: 'ms-inner sheet' }, build(close)));
+  el.onclick = e => { if (e.target === el) close(); };
+  document.body.append(el);
+  return close;
+}
+
+// Delete my account: out of every group (my groups go to the next friend, or away if I'm alone), then my data and sign-in.
+async function deleteAccount() {
+  const owned = myGroups.filter(g => g.owner === user.uid);
+  const alone = owned.filter(g => g.memberUids.length === 1);
+  const handed = owned.filter(g => g.memberUids.length > 1);
+  const lines = ['למחוק את החשבון שלך?', '', 'הפרופיל, תאריך הלידה וההתראות יימחקו, ותצא מכל הקבוצות.'];
+  if (alone.length) lines.push(`קבוצות שאתה לבד בהן יימחקו: ${alone.map(g => g.name).join(', ')}`);
+  if (handed.length) lines.push(`בקבוצות שאתה מנהל, הניהול יעבור לחבר הבא: ${handed.map(g => g.name).join(', ')}`);
+  lines.push('', 'הודעות שכתבת והוצאות שרשמת נשארות אצל הקבוצה. אי אפשר לבטל את זה.');
+  if (!confirm(lines.join('\n'))) return;
+  toast('מוחק...');
   try {
-    if (mine) await store.deleteGroup(g.gid, g.code);
-    else await store.leaveGroup(g.gid, user.uid, g.people[user.uid]);
-    toast(mine ? 'הקבוצה נמחקה' : 'יצאת מהקבוצה');
+    for (const g of [...myGroups]) {
+      if (g.owner === user.uid && g.memberUids.length === 1) { await store.deleteGroup(g.gid, g.code); continue; }
+      if (g.owner === user.uid) await store.setOwner(g.gid, g.memberUids.find(u => u !== user.uid));
+      await store.leaveGroup(g.gid, user.uid, g.people[user.uid], userDoc?.hidden?.[g.gid]);
+    }
+    ls.set(pushKey(), false);
+    ls.set('hevre:siteadmin:' + user.uid, false);
+    await store.deleteAccount(user.uid);
+    location.hash = '';
+    toast('החשבון נמחק. להתראות 👋');
+  } catch (e) {
+    console.error('delete account', e);
+    toast('משהו נתקע באמצע, תנסה שוב');
+  }
+}
+
+// 🔔/🔕 in a group's header: notifications from this group on or off, for all my phones
+const isMuted = id => !!userDoc?.muted?.[id];
+async function toggleMute(id) {
+  const on = !isMuted(id);
+  try {
+    await store.muteGroup(user.uid, id, on);
+    buzz(10);
+    toast(on ? '🔕 הקבוצה הזאת בשקט, לא יגיעו ממנה התראות' : '🔔 ההתראות מהקבוצה הזאת חזרו');
   } catch { toast('משהו נתקע, תנסה שוב'); }
+}
+
+/* ---------- stats: only for whoever runs the site (the server checks) ---------- */
+
+let statsCache = null;
+async function renderStats() {
+  const body = h('div', null, h('p', { class: 'empty' }, 'סופר...'));
+  app.replaceChildren(
+    h('div', { class: 'top' },
+      h('a', { class: 'glassbtn', href: '#', title: 'הקבוצות שלי', 'aria-label': 'הקבוצות שלי' }, '→'),
+      h('div', { style: 'flex:1;min-width:0' }, h('h2', null, '📊 סטטיסטיקות'), h('div', { class: 'me' }, 'רק אתה רואה את הדף הזה')),
+    ),
+    body,
+  );
+  const fresh = statsCache && Date.now() - statsCache.at < 30e3;
+  const s = fresh ? statsCache.data : await callApi('/stats', {});
+  if (location.hash !== '#stats' || !document.body.contains(body)) return;
+  if (!s?.ok) {
+    body.replaceChildren(h('div', { class: 'done' }, h('div', { class: 'em' }, '🔒'), h('h3', null, 'הדף הזה רק למי שמנהל את האתר')));
+    return;
+  }
+  if (!fresh) statsCache = { at: Date.now(), data: s };
+  ls.set('hevre:siteadmin:' + user.uid, true);
+  const num = n => (n == null ? '—' : Number(n).toLocaleString('he-IL'));
+  const tile = (em, n, label) => h('div', { class: 'stat' }, h('span', { class: 'stat-em' }, em), h('b', null, num(n)), h('small', null, label));
+  const today = s.days.at(-1) || {};
+  const bars = (title, key) => {
+    const max = Math.max(1, ...s.days.map(d => d[key] || 0));
+    return h('div', { class: 'panel' },
+      h('h3', null, title),
+      h('div', { class: 'bars' }, s.days.map(d => h('div', { class: 'bar', title: `${d.date}: ${d[key] || 0}` },
+        h('i', { style: `height:${Math.round(((d[key] || 0) / max) * 100)}%` }),
+        h('small', null, Number(d.date.slice(8, 10))),
+      ))),
+    );
+  };
+  body.replaceChildren(
+    h('div', { class: 'panel' },
+      h('h3', null, '👥 משתמשים'),
+      h('div', { class: 'stats' },
+        tile('👥', s.users?.total, 'נרשמו'),
+        tile('🟢', s.users?.activeToday, 'נכנסו היום'),
+        tile('🆕', s.users?.newWeek, 'חדשים השבוע'),
+      ),
+    ),
+    h('div', { class: 'panel' },
+      h('h3', null, '🏠 קבוצות'),
+      h('div', { class: 'stats' },
+        tile('🏠', s.groups.total, 'קבוצות'),
+        tile('✨', s.groups.newWeek, 'חדשות השבוע'),
+        tile('👨‍👩‍👧', s.groups.avgMembers, 'חברים בממוצע'),
+      ),
+    ),
+    h('div', { class: 'panel' },
+      h('h3', null, '⚡ היום'),
+      h('div', { class: 'stats' },
+        tile('🔥', today.groups, 'קבוצות פעילות'),
+        tile('🃏', today.rounds, 'סיבובים'),
+        tile('💬', today.chats, 'הודעות'),
+        tile('🤖', (today.ai || 0) + (today.suggest || 0) + (today.summary || 0), 'שימושים ב-AI'),
+        tile('🔔', today.pushes, 'התראות'),
+      ),
+    ),
+    bars('🔥 קבוצות פעילות, 14 ימים', 'groups'),
+    bars('💬 הודעות ביום', 'chats'),
+    h('p', { class: 'muted small', style: 'text-align:center' }, 'הספירה של הפעילות התחילה ב-8.10.2026'),
+  );
 }
 
 // Unread chat count for the home list (local mode only knows the last message; that's enough for a dot).
@@ -399,6 +553,10 @@ function renderGroup(me) {
           class: 'code', onclick: async () => { try { await navigator.clipboard.writeText(g.code); toast('הקוד הועתק'); } catch {} },
         }, g.code)),
       ),
+      isLive && h('button', {
+        class: 'glassbtn bell', onclick: () => toggleMute(gid),
+        'aria-label': isMuted(gid) ? 'להחזיר התראות מהקבוצה' : 'להשתיק את הקבוצה', title: isMuted(gid) ? 'הקבוצה בשקט' : 'להשתיק את הקבוצה',
+      }, isMuted(gid) ? '🔕' : '🔔'),
       h('button', { class: 'glassbtn', onclick: () => inviteSheet(g) }, '📤 הזמן'),
     ),
     !isLive && h('div', { class: 'banner' }, 'מצב בדיקה: הכל נשמר רק בדפדפן הזה'),
@@ -1156,7 +1314,8 @@ function peopleTab(me) {
     ),
     others.length > 0 && h('div', { class: 'panel' },
       h('h3', null, '🙋 החבר\'ה'),
-      h('p', { class: 'muted small' }, amAdmin ? '👑 אתה המנהל: פתחת את הקבוצה, אז רק אתה יכול להוציא ממנה אנשים' : `👑 מנהל הקבוצה: ${admin}`),
+      h('p', { class: 'muted small' }, amAdmin ? '👑 אתה המנהל: רק אתה יכול להוציא אנשים ולמחוק את הקבוצה' : `👑 מנהל הקבוצה: ${admin}`),
+      amAdmin && h('button', { class: 'linkbtn', style: 'margin:0 0 10px', onclick: () => pickAdmin(g) }, '👑 להעביר את הניהול למישהו אחר'),
       h('div', { class: 'people' }, others.map(m => personCard(m, { admin: m === admin, onKick: amAdmin ? () => kick(m) : null }))),
     ),
     amAdmin && banned.length > 0 && h('div', { class: 'panel' },

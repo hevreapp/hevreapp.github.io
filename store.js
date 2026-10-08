@@ -3,7 +3,7 @@
 //  - Local (localStorage) otherwise: only this browser, for testing before Firebase exists.
 //    "Sign in" there is just a name, and you can switch users to play every friend yourself.
 //
-// users/{uid}          {name, likes, dislikes, limits, note, share, hidden: {gid: hid}, ts}
+// users/{uid}          {name, likes, dislikes, limits, note, share, hidden: {gid: hid}, muted: {gid: true}, ts}
 // codes/{CODE}         {gid}                                   join a group by its 6-letter code
 // groups/{gid}         {name, code, owner, memberUids, people: {uid: name}, members: [names], banned: {uid: name}, createdAt}
 //   round/state        {status: 'lobby'|'live', owner, spin, spinTs}
@@ -27,7 +27,7 @@
 // A group watcher gets: {group, round, here, profiles, hidden, options, votes, when, chat, expenses, settlements, budget, kitty, info, plan, bring, rides, mycards, pollvotes, reacts, aichat}
 const NAMED = ['here', 'votes', 'when', 'profiles', 'bring', 'rides']; // docs keyed by a member's name
 
-import { firebaseConfig } from './firebase-config.js?v=20261008143426';
+import { firebaseConfig } from './firebase-config.js?v=20261008145109';
 
 export const isLive = !!(firebaseConfig && firebaseConfig.projectId);
 
@@ -125,12 +125,25 @@ function localStore() {
       const codes = get('hevre:codes', {}); delete codes[code]; put('hevre:codes', codes);
       emit(gid);
     },
-    async leaveGroup(gid, uid, name) {
+    async leaveGroup(gid, uid, name, hid) {
       write(gid, s => {
         s.group.memberUids = s.group.memberUids.filter(u => u !== uid);
         delete s.group.people[uid];
         s.group.members = s.group.members.filter(m => m !== name);
+        for (const c of NAMED) if (s[c]) delete s[c][name];
+        if (hid) s.hidden = s.hidden.filter(x => x.id !== hid);
       });
+    },
+    async setOwner(gid, uid) { write(gid, s => { s.group.owner = uid; }); },
+    async muteGroup(uid, gid, on) {
+      const all = users(); const u = all[uid] || {};
+      u.muted = { ...(u.muted || {}) };
+      if (on) u.muted[gid] = true; else delete u.muted[gid];
+      all[uid] = u; put('hevre:users', all); bus.forEach(f => f());
+    },
+    async deleteAccount(uid) {
+      const all = users(); delete all[uid]; put('hevre:users', all);
+      localStorage.removeItem('hevre:session'); fireAuth(); bus.forEach(f => f());
     },
     async kick(gid, uid, name) {
       write(gid, s => {
@@ -266,9 +279,32 @@ async function firebaseStore() {
       if (code) await fs.deleteDoc(fs.doc(db, 'codes', code));
       await fs.deleteDoc(g(gid));
     },
-    leaveGroup: (gid, uid, name) => fs.updateDoc(g(gid), {
-      memberUids: fs.arrayRemove(uid), [`people.${uid}`]: fs.deleteField(), members: fs.arrayRemove(name),
-    }),
+    // Leaving: first my own stuff in the round and my hidden limits (only members may delete them), then me.
+    async leaveGroup(gid, uid, name, hid) {
+      await Promise.all([
+        ...NAMED.map(c => fs.deleteDoc(fs.doc(sub(gid, c), name)).catch(() => {})),
+        hid && fs.deleteDoc(fs.doc(sub(gid, 'hidden'), hid)).catch(() => {}),
+      ]);
+      await fs.updateDoc(g(gid), { memberUids: fs.arrayRemove(uid), [`people.${uid}`]: fs.deleteField(), members: fs.arrayRemove(name) });
+    },
+    // the admin hands the group to another member
+    setOwner: (gid, uid) => fs.updateDoc(g(gid), { owner: uid }),
+    // no notifications from this group, on all my phones (the server checks users/{uid}.muted)
+    muteGroup: (uid, gid, on) => fs.setDoc(fs.doc(db, 'users', uid), { muted: { [gid]: on ? true : fs.deleteField() } }, { merge: true }),
+    // Everything the account keeps outside groups, then the Google sign-in itself.
+    // (Leaving the groups happens before this, in the app.)
+    async deleteAccount(uid) {
+      if (fm) await fm.deleteToken(fm.getMessaging(fapp)).catch(() => {});
+      for (const d of (await fs.getDocs(fs.collection(db, 'users', uid, 'push'))).docs) await fs.deleteDoc(d.ref);
+      await fs.deleteDoc(fs.doc(db, 'users', uid));
+      try { await fa.deleteUser(auth.currentUser); }
+      catch (e) {
+        // Google wants a fresh sign-in before deleting an account: one more popup, then delete
+        if (e.code !== 'auth/requires-recent-login') throw e;
+        await fa.reauthenticateWithPopup(auth.currentUser, new fa.GoogleAuthProvider());
+        await fa.deleteUser(auth.currentUser);
+      }
+    },
     // The creator takes someone out: off the member list, onto the kept-out list, and their round stuff cleared.
     async kick(gid, uid, name) {
       await fs.updateDoc(g(gid), {

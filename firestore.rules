@@ -15,8 +15,9 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid
         && (request.method == 'get' || request.method == 'delete'
-            || (request.resource.data.keys().hasOnly(['name', 'born', 'likes', 'dislikes', 'limits', 'note', 'share', 'budget', 'hidden', 'ts'])
+            || (request.resource.data.keys().hasOnly(['name', 'born', 'likes', 'dislikes', 'limits', 'note', 'share', 'budget', 'hidden', 'muted', 'ts'])
                 && optStr(request.resource.data.get('name', ''), 30)
+                && (!('muted' in request.resource.data) || (request.resource.data.muted is map && request.resource.data.muted.size() <= 100))
                 && optStr(request.resource.data.get('note', ''), 140)
                 && (!('born' in request.resource.data) || request.resource.data.born.matches('^[12][0-9]{3}-[01][0-9]-[0-3][0-9]$'))));
     }
@@ -83,6 +84,11 @@ service cloud.firestore {
       allow update: if signedIn() && resource.data.owner == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'people', 'members', 'banned'])
         && kickOk(resource.data, request.resource.data);
+      // ...or hands the group to another member (and can then leave like anyone else)
+      allow update: if signedIn() && resource.data.owner == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['owner'])
+        && request.resource.data.owner in resource.data.memberUids
+        && request.resource.data.owner != request.auth.uid;
       // ...or lets someone from that list back (they can join again with the code)
       allow update: if signedIn() && resource.data.owner == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['banned'])
@@ -191,6 +197,7 @@ service cloud.firestore {
       }
       match /profiles/{name} {
         allow read: if member();
+        allow delete: if member() && name == myName(); // leaving the group
         allow write: if member() && name == myName()
           && request.resource.data.keys().hasOnly(['likes', 'dislikes', 'limits', 'note', 'share', 'budget', 'born', 'ts'])
           && request.resource.data.likes.size() <= 20 && request.resource.data.dislikes.size() <= 20
