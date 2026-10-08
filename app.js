@@ -1,10 +1,10 @@
-import { store, isLive, newId, newCode } from './store.js?v=20261008222357';
-import { balances, transfers, shekels } from './split.js?v=20261008222357';
-import { packs } from './ideas.js?v=20261008222357';
-import { confetti, buzz, CARD_HUES } from './fx.js?v=20261008222357';
-import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261008222357';
-import { EXPLAIN } from './explain.js?v=20261008222357';
-import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261008222357';
+import { store, isLive, newId, newCode } from './store.js?v=20261008223714';
+import { balances, transfers, shekels } from './split.js?v=20261008223714';
+import { packs } from './ideas.js?v=20261008223714';
+import { confetti, buzz, CARD_HUES } from './fx.js?v=20261008223714';
+import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261008223714';
+import { EXPLAIN } from './explain.js?v=20261008223714';
+import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261008223714';
 
 // The always-on server (AI + notifications). Fire and forget: the site works the same without it.
 async function callApi(path, body) {
@@ -41,7 +41,7 @@ function uaShort() {
 }
 addEventListener('error', e => report(e.error || { message: e.message }, 'קוד'));
 addEventListener('unhandledrejection', e => report(e.reason, 'קוד'));
-import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261008222357';
+import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261008223714';
 
 const root = document.getElementById('app');
 // Same falsy-skipping as h(), so `cond && el` works at the top level too.
@@ -667,6 +667,7 @@ function renderJoin() {
     return;
   }
   const err = h('div', { class: 'err' });
+  if (g.approval) return renderAsk(g, err);
   const go = h('button', { class: 'btn wide' }, 'יאללה אני בפנים');
   go.onclick = async () => {
     if (g.memberUids.length >= MAX_MEMBERS) return err.textContent = 'הקבוצה מלאה';
@@ -687,6 +688,44 @@ function renderJoin() {
       g.members.map((n, i) => h('span', { class: 'chip big', style: `animation-delay:${i * 60}ms` }, n))),
     go, err,
     h('a', { class: 'linkbtn', href: '#' }, 'לא עכשיו'),
+  );
+}
+
+// 🔐 A group where the admin approves who comes in: ask, then wait. The page opens by itself once approved.
+const joinReq = {}; // gid → 'checking' | 'pending' | 'none'
+function renderAsk(g, err) {
+  const id = gid;
+  if (joinReq[id] === undefined) {
+    joinReq[id] = 'checking';
+    store.getRequest(id, user.uid).then(r => { joinReq[id] = r ? 'pending' : 'none'; render(); }, () => { joinReq[id] = 'none'; render(); });
+  }
+  const ask = h('button', { class: 'btn wide' }, '🙋 לבקש להצטרף');
+  ask.onclick = async () => {
+    if (g.memberUids.length >= MAX_MEMBERS) return err.textContent = 'הקבוצה מלאה';
+    ask.disabled = true;
+    try { await store.requestJoin(id, user.uid, myName()); joinReq[id] = 'pending'; buzz(20); callApi('/notify', { gid: id, type: 'join' }); render(); }
+    catch (e) { report(e, 'בקשת הצטרפות'); err.textContent = 'משהו נתקע תנסה שוב'; ask.disabled = false; }
+  };
+  const cancel = async () => {
+    try { await store.cancelRequest(id, user.uid); joinReq[id] = 'none'; render(); }
+    catch (e) { report(e, 'ביטול בקשה'); toast('משהו נתקע, תנסה שוב'); }
+  };
+  const st = joinReq[id];
+  app.replaceChildren(
+    h('div', { class: 'hero' },
+      h('div', { class: 'wave' }, st === 'pending' ? '⏳' : '🔐'),
+      h('p', { class: 'tag', style: 'margin-bottom:6px' }, 'הוזמנת לקבוצה'),
+      h('div', { class: 'logo sm' }, g.name),
+    ),
+    h('div', { class: 'chips pick', style: 'justify-content:center;margin-bottom:22px' },
+      g.members.map((n, i) => h('span', { class: 'chip big', style: `animation-delay:${i * 60}ms` }, n))),
+    st === 'pending'
+      ? [h('div', { class: 'waitbox' }, 'ביקשת להצטרף ✅ כשהמנהל יאשר, הקבוצה תיפתח לך כאן לבד'),
+         h('button', { class: 'linkbtn', onclick: cancel }, 'לבטל את הבקשה')]
+      : st === 'checking'
+        ? h('p', { class: 'empty' }, 'טוען...')
+        : [h('p', { class: 'muted', style: 'text-align:center' }, 'בקבוצה הזאת המנהל מאשר כל מי שנכנס'), ask, err],
+    h('a', { class: 'linkbtn', href: '#' }, 'לקבוצות שלי'),
   );
 }
 
@@ -733,7 +772,8 @@ function renderGroup(me) {
       h('button', { class: tab === 'decide' ? 'on' : '', onclick: () => setTab('decide') }, '🃏', h('span', null, 'מה עושים')),
       h('button', { class: tab === 'chat' ? 'on' : '', onclick: () => setTab('chat') }, '💬', h('span', null, 'צ\'אט'),
         unread > 0 && h('i', { class: 'badge' }, unread > 9 ? '9+' : unread)),
-      h('button', { class: tab === 'people' ? 'on' : '', onclick: () => setTab('people') }, '🙋', h('span', null, 'החבר\'ה')),
+      h('button', { class: tab === 'people' ? 'on' : '', onclick: () => setTab('people') }, '🙋', h('span', null, 'החבר\'ה'),
+        g.owner === user.uid && state.requests?.length > 0 && h('i', { class: 'badge' }, state.requests.length)),
       h('button', { class: tab === 'money' ? 'on' : '', onclick: () => setTab('money') }, '💸', h('span', null, 'מי חייב')),
     )),
     content,
@@ -1113,6 +1153,8 @@ function results(me, info) {
   const matches = [...info.matches].sort((a, b) => conflicts(a) - conflicts(b));
   const top = ranked[0]?.pts || 1;
   if (allDone && matches.length) showMatch(matches, me);
+  once('trend:' + gid + ':' + (state.round?.ts || 0), allDone && matches.length > 0 && isLive && !state.group.demo,
+    () => callApi('/notify', { gid, type: 'match', optId: matches[0].id }));
   const fitting = ranked.filter(x => !conflicts(x.o));
   const wheelPool = (fitting.length >= 2 ? fitting : ranked).slice(0, 4).map(x => x.o);
 
@@ -1268,8 +1310,9 @@ function addOptions(me) {
   const room = Math.min(MAX_OPTIONS, deckSize) - state.options.length;
 
   const fitsAll = ls.get('hevre:fitsall', true);
-  const addMany = async items => {
-    let fresh = items.filter(([, t]) => !have.has(t));
+  // pin: texts that go in first no matter what (the birthday classics)
+  const addMany = async (items, pin = []) => {
+    let fresh = items.filter(([, t], i) => !have.has(t) && items.findIndex(x => x[1] === t) === i); // a card can sit in two lists
     if (!fresh.length) return toast('כבר הוספתם הכל מפה');
     let skipped = 0;
     if (fitsAll) {
@@ -1280,8 +1323,10 @@ function addOptions(me) {
     }
     if (room <= 0) return toast(`השולחן מלא (${deckSize} קלפים)`);
     // what the group is into first, shuffled within the same level so packs still feel random
-    const pickN = fresh.map(it => [it, groupLikes(it[1]) + Math.random()]).sort((a, b) => b[1] - a[1]).map(x => x[0])
-      .slice(0, Math.min(10, room));
+    const pickN = [
+      ...fresh.filter(it => pin.includes(it[1])),
+      ...fresh.filter(it => !pin.includes(it[1])).map(it => [it, groupLikes(it[1]) + Math.random()]).sort((a, b) => b[1] - a[1]).map(x => x[0]),
+    ].slice(0, Math.min(10, room));
     const t = Date.now();
     await Promise.all(pickN.map(([emoji, text], i) =>
       store.addOption(gid, { id: newId(10), emoji, text, by: me, ts: t + i })));
@@ -1301,8 +1346,32 @@ function addOptions(me) {
   own.onkeydown = e => { if (e.key === 'Enter') addOwn(); };
 
   const all = packs.flatMap(p => p.items);
+
+  // 🎂 whose birthday month it is (only friends who share their profile and didn't switch it off; never shown to them)
+  const month = isoDay(new Date()).slice(5, 7);
+  const bdays = state.group.members.filter(m => {
+    const p = state.profiles?.[m];
+    return m !== me && p && p.share === 'group' && !p.bdayOff && String(p.born || '').slice(5, 7) === month;
+  });
+  const BDAY = [['🎂', 'מסיבת הפתעה'], ['🧁', 'אופים עוגה ביחד'], ['🎁', 'לקנות מתנות של 10₪ אחד לשני']];
+  const addBday = m => {
+    const likes = profileOf(m).likes;
+    addMany([...BDAY, ...all.filter(([, t]) => tagsOf(t).some(x => likes.includes(x)))], BDAY.map(([, t]) => t));
+  };
+  // 🔥 what other groups matched on most this week (counts only, from the server)
+  const addTrending = async () => {
+    const r = await callApi('/trending', {});
+    if (!r?.items?.length) return toast('עוד אין מספיק קבוצות השבוע, תנסו שוב בעוד כמה ימים');
+    addMany(r.items.map(x => [x.emoji, x.text]));
+  };
+
   return h('div', { class: 'panel' },
     h('h3', null, '🃏 להוסיף קלפים'),
+    bdays.length > 0 && h('div', { class: 'bday' },
+      h('span', { class: 'bday-em' }, '🎂'),
+      h('div', null, h('b', null, `החודש יום ההולדת של ${bdays.join(' ושל ')}!`), h('small', null, 'בא לכם לתכנן משהו? (הם לא רואים את זה)')),
+      h('button', { class: 'chip on', onclick: () => addBday(bdays[0]) }, '🎉 קלפים ליום הולדת'),
+    ),
     h('div', { class: 'decksize' },
       h('span', null, 'כמה קלפים בסיבוב?'),
       h('div', { class: 'seg' }, DECKS.map(n => h('button', {
@@ -1312,6 +1381,7 @@ function addOptions(me) {
     h('p', { class: 'muted small', style: 'margin:8px 0 12px' }, `${state.options.length}/${deckSize} על השולחן. בכל חבילה נכנסים קודם הקלפים שהכי מתאימים לחבר'ה`),
     h('div', { class: 'chips' },
       API && isLive && h('button', { class: 'chip ai', onclick: aiSuggest }, '🤖 תציע לנו'),
+      API && isLive && h('button', { class: 'chip', onclick: addTrending }, '🔥 טרנדי השבוע'),
       h('button', { class: 'chip on', onclick: () => addMany(all) }, '🎲 הפתעה'),
       state.mycards?.length > 0 && h('button', { class: 'chip ours', onclick: () => addMany(state.mycards.map(c => [c.emoji, c.text])) },
         `⭐ שלנו (${state.mycards.length})`),
@@ -1337,7 +1407,7 @@ const isEmptyProfile = p => !p.likes.length && !p.dislikes.length && !p.limits.l
 
 function publicPart(p) {
   const shared = p.share === 'group';
-  return { likes: p.likes, dislikes: p.dislikes, limits: shared ? p.limits : [], note: shared ? p.note : '', budget: shared ? p.budget : ANY_BUDGET, born: shared ? roughBorn(p.born) : '', share: p.share, ts: Date.now() };
+  return { likes: p.likes, dislikes: p.dislikes, limits: shared ? p.limits : [], note: shared ? p.note : '', budget: shared ? p.budget : ANY_BUDGET, born: shared ? roughBorn(p.born) : '', ...(p.bdayOff ? { bdayOff: true } : {}), share: p.share, ts: Date.now() };
 }
 
 // Copy my profile into one group (or all of mine).
@@ -1446,6 +1516,19 @@ function peopleTab(me) {
     catch (e) { report(e, 'החזרת חבר'); toast('משהו נתקע, תנסה שוב'); }
   };
   const banned = Object.entries(g.banned || {});
+  const requests = amAdmin ? state.requests || [] : [];
+  const approve = async r => {
+    if (g.memberUids.length >= MAX_MEMBERS) return toast('הקבוצה מלאה');
+    let n = r.name, i = 2;
+    while (g.members.includes(n)) n = `${r.name} ${i++}`; // two called דני: the second is "דני 2"
+    try { await store.approve(gid, r.uid, n); buzz(20); toast(`✅ ${n} בפנים`); callApi('/notify', { gid, type: 'approved', uid: r.uid }); }
+    catch (e) { report(e, 'אישור הצטרפות'); toast('משהו נתקע, תנסה שוב'); }
+  };
+  const decline = async r => {
+    if (!confirm(`לדחות את הבקשה של ${r.name}?`)) return;
+    try { await store.decline(gid, r.uid); toast('הבקשה נדחתה'); }
+    catch (e) { report(e, 'דחיית בקשה'); toast('משהו נתקע, תנסה שוב'); }
+  };
 
   return h('div', null,
     h('div', { class: 'panel' },
@@ -1464,6 +1547,10 @@ function peopleTab(me) {
         type: 'date', class: 'agein', value: mine.born || '', max: isoDay(new Date()),
         onchange: e => { if (validBorn(e.target.value)) save({ born: e.target.value }); else toast('תאריך לא הגיוני'); },
       }),
+      mine.share === 'group' && h('button', {
+        class: 'fitsall' + (!mine.bdayOff ? ' on' : ''), style: 'margin-top:10px', 'aria-pressed': !mine.bdayOff ? 'true' : 'false',
+        onclick: () => { buzz(8); save({ bdayOff: !mine.bdayOff }); },
+      }, h('span', { class: 'sw' }), '🎂 להזכיר לחבר\'ה בחודש של יום ההולדת שלי'),
       h('label', null, '💸 כמה אני יכול להוציא על יציאה?'),
       h('div', { class: 'seg budgets' }, BUDGETS.map(([v, l]) => h('button', {
         class: (mine.budget ?? ANY_BUDGET) === v ? 'on' : '', onclick: () => { buzz(8); save({ budget: v }); },
@@ -1479,6 +1566,28 @@ function peopleTab(me) {
       h('p', { class: 'muted small' }, mine.share === 'hidden'
         ? 'אף אחד לא רואה מה סימנת. קלפים שלא מתאימים לך יסומנו רק "לא מתאים למישהו בקבוצה"'
         : 'החבר\'ה בקבוצות שלך רואים את זה ליד השם שלך, ככה הם יודעים לבחור משהו שמתאים גם לך'),
+    ),
+    requests.length > 0 && h('div', { class: 'panel' },
+      h('h3', null, '🙋 מבקשים להצטרף'),
+      h('div', { class: 'kicked' }, requests.map(r => h('div', { class: 'kick-row' },
+        h('span', { class: 'av', style: `--h:${hue(r.name)}` }, [...r.name][0]),
+        h('b', null, r.name),
+        h('button', { class: 'chip on', onclick: () => approve(r) }, '✅ לאשר'),
+        h('button', { class: 'chip', 'aria-label': 'לדחות את ' + r.name, onclick: () => decline(r) }, '❌'),
+      ))),
+    ),
+    amAdmin && !g.demo && h('div', { class: 'panel' },
+      h('h3', null, '👑 ניהול הקבוצה'),
+      h('button', {
+        class: 'fitsall' + (g.approval ? ' on' : ''), 'aria-pressed': g.approval ? 'true' : 'false',
+        onclick: async () => {
+          try { await store.setApproval(gid, !g.approval); toast(g.approval ? 'כל מי שיש לו את הקוד נכנס' : '🔐 מעכשיו אתה מאשר כל מי שנכנס'); }
+          catch (e) { report(e, 'אישור הצטרפות'); toast('משהו נתקע, תנסה שוב'); }
+        },
+      }, h('span', { class: 'sw' }), '🔐 רק מי שאני מאשר נכנס'),
+      h('p', { class: 'muted small', style: 'margin:8px 0 0' }, g.approval
+        ? 'מי שמקבל את הקוד או הקישור שולח בקשה, ואתה מאשר אותה כאן'
+        : 'כרגע כל מי שיש לו את הקוד או הקישור נכנס ישר'),
     ),
     others.length > 0 && h('div', { class: 'panel' },
       h('h3', null, '🙋 החבר\'ה'),
@@ -1948,6 +2057,7 @@ function planPanel(me, what) {
   return h('div', { class: 'panel plan', id: 'plan' },
     h('h3', null, '🗺️ תוכנית ליציאה'),
     h('div', { class: 'plan-what' }, h('span', null, what.emoji || '✨'), h('b', null, what.text), day && h('small', null, '📅 ' + day)),
+    rsvpBlock(me, what),
 
     h('label', null, '📍 מאיפה יוצאים?'),
     h('div', { class: 'plan-where' }, region, meet),
@@ -2025,6 +2135,34 @@ function planPanel(me, what) {
   );
 }
 
+
+// 🙋 who's actually coming (not just which day works)
+function rsvpBlock(me, what) {
+  const r = state.rsvp || {};
+  const mine = r[me]?.v;
+  const members = state.group.members;
+  const who = v => members.filter(m => r[m]?.v === v);
+  const missing = members.filter(m => !r[m]);
+  const OPTS = [['yes', '✅', 'כן'], ['maybe', '🤔', 'אולי'], ['no', '❌', 'לא']];
+  const remind = async () => {
+    const res = await callApi('/notify', { gid, type: 'rsvp', optId: what.id });
+    if (res?.sent) return toast(`📲 שלחתי תזכורת ל-${res.sent}`);
+    if (res?.throttled) return toast('כבר נשלחה תזכורת בשעה האחרונה');
+    share(`מי בא ל${what.emoji || ''} ${what.text}? תענו פה 👇`, groupUrl(gid));
+  };
+  return h('div', { class: 'rsvp' },
+    h('label', null, `🙋 מי בא? ${who('yes').length} מתוך ${members.length}`),
+    h('div', { class: 'seg' }, OPTS.map(([v, e, l]) => h('button', {
+      class: mine === v ? 'on' : '', 'aria-pressed': mine === v ? 'true' : 'false',
+      onclick: () => { buzz(8); store.setRsvp(gid, me, mine === v ? null : v); },
+    }, e + ' ' + l))),
+    h('div', { class: 'rsvp-list' },
+      OPTS.map(([v, e]) => who(v).length > 0 && h('div', null, e + ' ' + who(v).join(', '))),
+      missing.length > 0 && h('div', { class: 'muted' }, '⏳ עוד לא ענו: ' + missing.join(', ')),
+    ),
+    missing.some(m => m !== me) && h('button', { class: 'linkbtn', style: 'margin:6px 0 0', onclick: remind }, '📲 תזכיר למי שלא ענה'),
+  );
+}
 
 /* ---------- first time: three quick slides ---------- */
 
@@ -2250,7 +2388,7 @@ const toAgorot = v => Math.round(parseFloat(String(v).replace(',', '.')) * 100);
 
 // Remembered between renders so a friend's live update doesn't wipe what you're typing.
 let amongSel = null;
-const draft = { payer: null, amount: '', desc: '', cat: 'other' };
+const draft = { payer: null, amount: '', desc: '', cat: 'other', split: 'even', shares: {} };
 let editingBudget = false;
 
 function moneyTab(me) {
@@ -2267,6 +2405,7 @@ function moneyTab(me) {
 
   // form
   const fromKitty = kittyOn && draft.payer === KITTY;
+  const each = !fromKitty && draft.split === 'each';
   const who = fromKitty || members.includes(draft.payer) ? draft.payer : me;
   const payer = h('select', { onchange: () => { draft.payer = payer.value; render(); } },
     members.map(m => h('option', { value: m, selected: m === who }, m)),
@@ -2280,7 +2419,7 @@ function moneyTab(me) {
   const drawAmong = () => amongChips.replaceChildren(
     ...members.map(m => h('button', {
       class: 'chip' + (amongSel.has(m) ? ' on' : ''),
-      onclick: () => { amongSel.has(m) ? amongSel.delete(m) : amongSel.add(m); drawAmong(); },
+      onclick: () => { amongSel.has(m) ? amongSel.delete(m) : amongSel.add(m); each ? render() : drawAmong(); },
     }, m)),
   );
   drawAmong();
@@ -2291,6 +2430,24 @@ function moneyTab(me) {
   drawCats();
 
   const add = async () => {
+    if (each) {
+      // each pays their own: the total is what everyone wrote
+      const among = members.filter(m => amongSel.has(m));
+      const shares = Object.fromEntries(among.map(m => [m, toAgorot(draft.shares[m] || 0) || 0]));
+      if (Object.values(shares).some(v => v < 0)) return err.textContent = 'סכום לא הגיוני';
+      const who = among.filter(m => shares[m] > 0);
+      const total = who.reduce((a, m) => a + shares[m], 0);
+      if (!total) return err.textContent = 'כמה כל אחד?';
+      if (total > 10_000_000) return err.textContent = 'זה קצת הרבה לא?';
+      err.textContent = '';
+      const text = desc.value.replace(/\s+/g, ' ').trim().slice(0, 40);
+      draft.desc = ''; draft.shares = {};
+      await store.addExpense(gid, {
+        id: newId(10), amount: total, desc: text, cat: draft.cat, by: me, ts: Date.now(),
+        payer: payer.value, among: who, shares: Object.fromEntries(who.map(m => [m, shares[m]])),
+      });
+      return toast('נוסף');
+    }
     const ag = toAgorot(amount.value);
     if (!ag || ag <= 0) return err.textContent = 'כמה זה עלה?';
     if (ag > 10_000_000) return err.textContent = 'זה קצת הרבה לא?';
@@ -2356,12 +2513,31 @@ function moneyTab(me) {
       h('h3', null, '🧾 הוצאה חדשה'),
       isLive && h('button', { class: 'glassbtn wide', onclick: pickReceipt }, '📷 לצלם קבלה, וה-AI ימלא'),
       h('label', null, 'מי שילם?'), payer,
-      h('label', null, 'כמה ₪?'), amount,
+      each
+        ? h('label', null, 'סה"כ: ', h('b', { class: 'eachsum' }, shekels(members.filter(m => amongSel.has(m)).reduce((a, m) => a + (toAgorot(draft.shares[m] || 0) || 0), 0))))
+        : [h('label', null, 'כמה ₪?'), amount],
       h('label', null, 'על מה?'), desc,
       h('label', null, 'סוג'), catChips,
       fromKitty
         ? h('p', { class: 'muted small', style: 'margin-top:12px' }, `🏦 יוצא מהקופה, אף אחד לא חייב כלום. בקופה עכשיו ${shekels(kittyLeft)}`)
-        : [h('label', null, 'בין מי?'), amongChips],
+        : [
+            h('label', null, 'בין מי?'), amongChips,
+            h('div', { class: 'seg', style: 'margin-top:10px' },
+              h('button', { class: !each ? 'on' : '', onclick: () => { draft.split = 'even'; render(); } }, '⚖️ שווה בשווה'),
+              h('button', { class: each ? 'on' : '', onclick: () => { draft.split = 'each'; render(); } }, '🍽️ כל אחד כמה שלו'),
+            ),
+            each && h('div', { class: 'shares' }, members.filter(m => amongSel.has(m)).map(m => h('div', { class: 'share-row' },
+              h('span', null, m),
+              h('input', {
+                type: 'number', inputmode: 'decimal', min: '0', step: '0.01', placeholder: '0₪', value: draft.shares[m] || '',
+                oninput: e => {
+                  draft.shares[m] = e.target.value;
+                  const sum = members.filter(x => amongSel.has(x)).reduce((a, x) => a + (toAgorot(draft.shares[x] || 0) || 0), 0);
+                  const el = document.querySelector('.eachsum'); if (el) el.textContent = shekels(sum);
+                },
+              }),
+            ))),
+          ],
       err,
       h('button', { class: 'btn wide', onclick: add }, 'תוסיף'),
     ),
@@ -2382,7 +2558,7 @@ function moneyTab(me) {
         h('span', null, x.kind === 'e' ? (catLabel[x.cat] || '🧾').split(' ')[0] : x.kind === 's' ? '✅' : '🏦'),
         h('div', { class: 't' },
           x.kind === 'e'
-            ? [x.desc || 'הוצאה', h('small', null, `${x.payer} שילם ${shekels(x.amount)} · ${x.among.length === members.length ? 'כולם' : x.among.join(', ')}`)]
+            ? [x.desc || 'הוצאה', h('small', null, `${x.payer} שילם ${shekels(x.amount)} · ${x.shares ? 'כל אחד את שלו' : x.among.length === members.length ? 'כולם' : x.among.join(', ')}`)]
             : x.kind === 's'
               ? [`${x.from} העביר ל${x.to}`, h('small', null, shekels(x.amount))]
               : x.type === 'in'

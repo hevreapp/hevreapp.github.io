@@ -10,6 +10,9 @@ export function balances(members, expenses, settlements) {
     const among = (e.among || []).filter(has);
     if (!among.length || !has(e.payer)) continue;
     add(e.payer, e.amount);
+    // "each pays their own": per-person amounts; used only if they add up to the total exactly
+    const own = e.shares && typeof e.shares === 'object' ? among.map(m => Number.isInteger(e.shares[m]) && e.shares[m] >= 0 ? e.shares[m] : NaN) : null;
+    if (own && !own.some(Number.isNaN) && own.reduce((a, b) => a + b, 0) === e.amount) { among.forEach((m, i) => add(m, -own[i])); continue; }
     // Even split; the leftover agorot go one each to the first people in the list.
     const share = Math.floor(e.amount / among.length);
     let rest = e.amount - share * among.length;

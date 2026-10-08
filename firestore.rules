@@ -15,7 +15,7 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid
         && (request.method == 'get' || request.method == 'delete'
-            || (request.resource.data.keys().hasOnly(['name', 'born', 'likes', 'dislikes', 'limits', 'note', 'share', 'budget', 'hidden', 'muted', 'ts'])
+            || (request.resource.data.keys().hasOnly(['name', 'born', 'likes', 'dislikes', 'limits', 'note', 'share', 'budget', 'hidden', 'muted', 'bdayOff', 'ts'])
                 && optStr(request.resource.data.get('name', ''), 30)
                 && (!('muted' in request.resource.data) || (request.resource.data.muted is map && request.resource.data.muted.size() <= 100))
                 && optStr(request.resource.data.get('note', ''), 140)
@@ -74,6 +74,7 @@ service cloud.firestore {
       allow update: if signedIn()
         && !(request.auth.uid in resource.data.memberUids)
         && !(request.auth.uid in resource.data.get('banned', {}))   // the creator took them out
+        && !resource.data.get('approval', false)                    // this group lets people in by the admin's OK only
         && resource.data.memberUids.size() < 20
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'people', 'members'])
         && request.resource.data.memberUids.removeAll(resource.data.memberUids) == [request.auth.uid]
@@ -89,6 +90,15 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['owner'])
         && request.resource.data.owner in resource.data.memberUids
         && request.resource.data.owner != request.auth.uid;
+      // ...or switches "only people I approve" on or off
+      allow update: if signedIn() && resource.data.owner == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approval'])
+        && request.resource.data.approval is bool;
+      // ...or lets in one person who asked (requests/{their uid})
+      allow update: if signedIn() && resource.data.owner == request.auth.uid
+        && resource.data.memberUids.size() < 20
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'people', 'members'])
+        && approveOk(resource.data, request.resource.data);
       // ...or lets someone from that list back (they can join again with the code)
       allow update: if signedIn() && resource.data.owner == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['banned'])
@@ -107,6 +117,26 @@ service cloud.firestore {
           && after.banned.diff(was).affectedKeys().hasOnly([gone[0]])
           && after.banned[gone[0]] == before.people[gone[0]]
           && after.banned.size() <= 50;
+      }
+
+      function approveOk(before, after) {
+        let added = after.memberUids.removeAll(before.memberUids);
+        return added.size() == 1 && after.memberUids.size() == before.memberUids.size() + 1
+          && exists(/databases/$(database)/documents/groups/$(gid)/requests/$(added[0]))
+          && after.people.diff(before.people).affectedKeys().hasOnly([added[0]])
+          && shortStr(after.people[added[0]], 34)
+          && after.members.removeAll(before.members) == [after.people[added[0]]]
+          && after.members.size() == before.members.size() + 1;
+      }
+
+      // asking to join: your own doc only, not if you're in already or were taken out.
+      // The admin reads and deletes these through the rule below.
+      match /requests/{rid} {
+        allow get, delete: if signedIn() && request.auth.uid == rid;
+        allow create: if signedIn() && request.auth.uid == rid
+          && !(rid in grp().memberUids) && !(rid in grp().get('banned', {}))
+          && request.resource.data.keys().hasOnly(['name', 'ts'])
+          && shortStr(request.resource.data.name, 34) && okTs(request.resource.data.ts);
       }
 
       // The creator may read and clear anything inside (deleting the group, taking someone out).
@@ -189,6 +219,12 @@ service cloud.firestore {
         allow read, delete: if member();
         allow create, update: if member() && name == myName() && request.resource.data.size() <= 60;
       }
+      match /rsvp/{name} {
+        allow read, delete: if member();
+        allow create, update: if member() && name == myName()
+          && request.resource.data.keys().hasOnly(['v', 'ts'])
+          && request.resource.data.v in ['yes', 'maybe', 'no'];
+      }
       match /when/{name} {
         allow read, delete: if member();
         allow create, update: if member() && name == myName()
@@ -199,7 +235,7 @@ service cloud.firestore {
         allow read: if member();
         allow delete: if member() && name == myName(); // leaving the group
         allow write: if member() && name == myName()
-          && request.resource.data.keys().hasOnly(['likes', 'dislikes', 'limits', 'note', 'share', 'budget', 'born', 'ts'])
+          && request.resource.data.keys().hasOnly(['likes', 'dislikes', 'limits', 'note', 'share', 'budget', 'born', 'bdayOff', 'ts'])
           && request.resource.data.likes.size() <= 20 && request.resource.data.dislikes.size() <= 20
           && request.resource.data.limits.size() <= 20
           && optStr(request.resource.data.note, 140)
@@ -242,7 +278,8 @@ service cloud.firestore {
       match /expenses/{id} {
         allow read: if member();
         allow create: if member()
-          && request.resource.data.keys().hasOnly(['id', 'payer', 'amount', 'desc', 'cat', 'among', 'by', 'ts'])
+          && request.resource.data.keys().hasOnly(['id', 'payer', 'amount', 'desc', 'cat', 'among', 'shares', 'by', 'ts'])
+          && (!('shares' in request.resource.data) || (request.resource.data.shares is map && request.resource.data.shares.size() <= 20))
           && request.resource.data.id == id
           && request.resource.data.payer in grp().members
           && money(request.resource.data.amount)

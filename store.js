@@ -25,16 +25,16 @@
 //   votes values: 0 no, 1 yes, 2 super like, -1 veto
 //
 // A group watcher gets: {group, round, here, profiles, hidden, options, votes, when, chat, expenses, settlements, budget, kitty, info, plan, bring, rides, mycards, pollvotes, reacts, aichat}
-const NAMED = ['here', 'votes', 'when', 'profiles', 'bring', 'rides']; // docs keyed by a member's name
+const NAMED = ['here', 'votes', 'when', 'profiles', 'bring', 'rides', 'rsvp']; // docs keyed by a member's name
 
-import { firebaseConfig } from './firebase-config.js?v=20261008222357';
+import { firebaseConfig } from './firebase-config.js?v=20261008223714';
 
 export const isLive = !!(firebaseConfig && firebaseConfig.projectId);
 
 const empty = () => ({
   group: null, round: null, here: {}, profiles: {}, hidden: [], options: [], votes: {},
   when: {}, chat: [], expenses: [], settlements: [], budget: null, kitty: [], info: null, plan: null,
-  bring: {}, rides: {}, mycards: [], pollvotes: {}, reacts: {}, aichat: [],
+  bring: {}, rides: {}, mycards: [], pollvotes: {}, reacts: {}, aichat: [], rsvp: {}, requests: [],
 });
 
 export function newId(len = 16) {
@@ -155,6 +155,18 @@ function localStore() {
       });
     },
     async unban(gid, uid) { write(gid, s => { delete s.group.banned?.[uid]; }); },
+    async setRsvp(gid, name, v) { write(gid, s => { s.rsvp = s.rsvp || {}; if (v) s.rsvp[name] = { v, ts: Date.now() }; else delete s.rsvp[name]; }); },
+    async setApproval(gid, on) { write(gid, s => { s.group.approval = on; }); },
+    async requestJoin(gid, uid, name) { write(gid, s => { s.requests = (s.requests || []).filter(r => r.uid !== uid).concat({ uid, name, ts: Date.now() }); }); },
+    async getRequest(gid, uid) { return (read(gid).requests || []).find(r => r.uid === uid) || null; },
+    async cancelRequest(gid, uid) { write(gid, s => { s.requests = (s.requests || []).filter(r => r.uid !== uid); }); },
+    async decline(gid, uid) { write(gid, s => { s.requests = (s.requests || []).filter(r => r.uid !== uid); }); },
+    async approve(gid, uid, name) {
+      write(gid, s => {
+        s.group.memberUids.push(uid); s.group.people[uid] = name; s.group.members.push(name);
+        s.requests = (s.requests || []).filter(r => r.uid !== uid);
+      });
+    },
     async joinGroup(gid, uid, name) {
       write(gid, s => {
         if (s.group.memberUids.includes(uid) || s.group.banned?.[uid]) return;
@@ -184,7 +196,7 @@ function localStore() {
     onForegroundPush() {},
     async react(gid, msg, name, e) { write(gid, s => { const k = msg + '__' + name; if (e) s.reacts[k] = { msg, e }; else delete s.reacts[k]; }); },
     async clearRound(gid) {
-      write(gid, s => { s.options = []; s.votes = {}; s.here = {}; s.when = {}; s.plan = null; s.bring = {}; s.rides = {}; s.round = { status: 'lobby', owner: s.round?.owner || null, ts: Date.now() }; });
+      write(gid, s => { s.options = []; s.votes = {}; s.here = {}; s.when = {}; s.plan = null; s.bring = {}; s.rides = {}; s.rsvp = {}; s.round = { status: 'lobby', owner: s.round?.owner || null, ts: Date.now() }; });
     },
     async setRound(gid, patch) { write(gid, s => { s.round = { status: 'lobby', ...(s.round || {}), ...patch }; }); },
     async setProfile(gid, member, prof) { write(gid, s => { s.profiles[member] = prof; }); },
@@ -266,7 +278,7 @@ async function firebaseStore() {
     // Everything inside first (Firestore doesn't delete sub-collections with their parent), then the code, then the group.
     async deleteGroup(gid, code) {
       const SUBS = ['round', 'here', 'profiles', 'hidden', 'options', 'votes', 'when', 'chat', 'expenses', 'settlements',
-        'budget', 'kitty', 'info', 'plan', 'bring', 'rides', 'mycards', 'pollvotes', 'reacts', 'aichat', 'aiusage'];
+        'budget', 'kitty', 'info', 'plan', 'bring', 'rides', 'mycards', 'pollvotes', 'reacts', 'aichat', 'aiusage', 'rsvp', 'requests'];
       const refs = [];
       for (const name of SUBS) {
         try { (await fs.getDocs(sub(gid, name))).forEach(d => refs.push(d.ref)); } catch {} // e.g. the AI's counter, before the new rules
@@ -289,6 +301,20 @@ async function firebaseStore() {
     },
     // the admin hands the group to another member
     setOwner: (gid, uid) => fs.updateDoc(g(gid), { owner: uid }),
+    // 🙋 who's coming: one doc per person; no answer = no doc
+    setRsvp: (gid, name, v) => v ? fs.setDoc(fs.doc(sub(gid, 'rsvp'), name), { v, ts: Date.now() }) : fs.deleteDoc(fs.doc(sub(gid, 'rsvp'), name)),
+    // 🔐 joining needs the admin's OK: a request doc per person (named by uid), the admin lets them in
+    setApproval: (gid, on) => fs.updateDoc(g(gid), { approval: on }),
+    requestJoin: (gid, uid, name) => fs.setDoc(fs.doc(sub(gid, 'requests'), uid), { name, ts: Date.now() }),
+    async getRequest(gid, uid) { const d = await fs.getDoc(fs.doc(sub(gid, 'requests'), uid)); return d.exists() ? d.data() : null; },
+    cancelRequest: (gid, uid) => fs.deleteDoc(fs.doc(sub(gid, 'requests'), uid)),
+    decline: (gid, uid) => fs.deleteDoc(fs.doc(sub(gid, 'requests'), uid)),
+    async approve(gid, uid, name) {
+      const b = fs.writeBatch(db);
+      b.update(g(gid), { memberUids: fs.arrayUnion(uid), [`people.${uid}`]: name, members: fs.arrayUnion(name) });
+      b.delete(fs.doc(sub(gid, 'requests'), uid));
+      await b.commit();
+    },
     // no notifications from this group, on all my phones (the server checks users/{uid}.muted)
     muteGroup: (uid, gid, on) => fs.setDoc(fs.doc(db, 'users', uid), { muted: { [gid]: on ? true : fs.deleteField() } }, { merge: true }),
     // Everything the account keeps outside groups, then the Google sign-in itself.
@@ -339,6 +365,9 @@ async function firebaseStore() {
         fs.onSnapshot(fs.doc(db, 'groups', gid, 'plan', 'state'), d => { s.plan = d.exists() ? d.data() : null; push(); }, () => {}),
         fs.onSnapshot(sub(gid, 'bring'), q => { s.bring = Object.fromEntries(q.docs.map(d => [d.id, d.data()])); push(); }, () => {}),
         fs.onSnapshot(sub(gid, 'rides'), q => { s.rides = Object.fromEntries(q.docs.map(d => [d.id, d.data()])); push(); }, () => {}),
+        fs.onSnapshot(sub(gid, 'rsvp'), q => { s.rsvp = Object.fromEntries(q.docs.map(d => [d.id, d.data()])); push(); }, () => {}),
+        // only the admin may read these; for everyone else this listener just fails quietly
+        fs.onSnapshot(sub(gid, 'requests'), q => { s.requests = q.docs.map(d => ({ uid: d.id, ...d.data() })).sort(byTs); push(); }, () => {}),
         fs.onSnapshot(sub(gid, 'mycards'), q => { s.mycards = q.docs.map(d => d.data()).sort(byTs); push(); }, () => {}),
         fs.onSnapshot(fs.query(sub(gid, 'aichat'), fs.orderBy('ts', 'desc'), fs.limit(CHAT_MAX)),
           q => { s.aichat = q.docs.map(d => ({ ...d.data(), id: d.id })).reverse(); push(); }, () => {}),
@@ -383,7 +412,7 @@ async function firebaseStore() {
     setVote: (gid, member, optId, val) => fs.setDoc(fs.doc(sub(gid, 'votes'), member), { [optId]: val }, { merge: true }),
     async clearRound(gid) {
       const batch = fs.writeBatch(db);
-      for (const name of ['options', 'votes', 'here', 'when', 'plan', 'bring', 'rides']) {
+      for (const name of ['options', 'votes', 'here', 'when', 'plan', 'bring', 'rides', 'rsvp']) {
         (await fs.getDocs(sub(gid, name))).forEach(d => batch.delete(d.ref));
       }
       // owner stays: the same person runs the next round
