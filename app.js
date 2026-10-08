@@ -1,10 +1,10 @@
-import { store, isLive, newId, newCode } from './store.js?v=20261008145109';
-import { balances, transfers, shekels } from './split.js?v=20261008145109';
-import { packs } from './ideas.js?v=20261008145109';
-import { confetti, buzz, CARD_HUES } from './fx.js?v=20261008145109';
-import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261008145109';
-import { EXPLAIN } from './explain.js?v=20261008145109';
-import { API, VAPID_KEY } from './api-config.js?v=20261008145109';
+import { store, isLive, newId, newCode } from './store.js?v=20261008151206';
+import { balances, transfers, shekels } from './split.js?v=20261008151206';
+import { packs } from './ideas.js?v=20261008151206';
+import { confetti, buzz, CARD_HUES } from './fx.js?v=20261008151206';
+import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261008151206';
+import { EXPLAIN } from './explain.js?v=20261008151206';
+import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261008151206';
 
 // The always-on server (AI + notifications). Fire and forget: the site works the same without it.
 async function callApi(path, body) {
@@ -16,7 +16,7 @@ async function callApi(path, body) {
     return r.ok ? r.json() : null;
   } catch { return null; }
 }
-import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261008145109';
+import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261008151206';
 
 const root = document.getElementById('app');
 // Same falsy-skipping as h(), so `cond && el` works at the top level too.
@@ -280,7 +280,7 @@ function renderHome() {
     h('div', { class: 'homebar' },
       h('span', { class: 'av', style: `--h:${hue(myName())}` }, [...myName()][0]),
       h('div', { style: 'flex:1' }, h('b', null, 'היי ' + myName()), h('div', { class: 'muted small', style: 'margin:0' }, 'הקבוצות שלך')),
-      ls.get('hevre:siteadmin:' + user.uid, false) && h('a', { class: 'pushbtn', href: '#stats', 'aria-label': 'סטטיסטיקות', title: 'סטטיסטיקות' }, '📊'),
+      SITE_ADMINS.includes(user.uid) && h('a', { class: 'pushbtn', href: '#stats', 'aria-label': 'סטטיסטיקות', title: 'סטטיסטיקות' }, '📊'),
       isLive && pushButton(),
       h('button', { class: 'linkbtn', style: 'margin:0', onclick: () => store.signOut() }, isLive ? 'יציאה' : 'החלף משתמש'),
     ),
@@ -394,7 +394,6 @@ async function deleteAccount() {
       await store.leaveGroup(g.gid, user.uid, g.people[user.uid], userDoc?.hidden?.[g.gid]);
     }
     ls.set(pushKey(), false);
-    ls.set('hevre:siteadmin:' + user.uid, false);
     await store.deleteAccount(user.uid);
     location.hash = '';
     toast('החשבון נמחק. להתראות 👋');
@@ -435,7 +434,6 @@ async function renderStats() {
     return;
   }
   if (!fresh) statsCache = { at: Date.now(), data: s };
-  ls.set('hevre:siteadmin:' + user.uid, true);
   const num = n => (n == null ? '—' : Number(n).toLocaleString('he-IL'));
   const tile = (em, n, label) => h('div', { class: 'stat' }, h('span', { class: 'stat-em' }, em), h('b', null, num(n)), h('small', null, label));
   const today = s.days.at(-1) || {};
