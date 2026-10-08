@@ -1,10 +1,10 @@
-import { store, isLive, newId, newCode } from './store.js?v=20261008170018';
-import { balances, transfers, shekels } from './split.js?v=20261008170018';
-import { packs } from './ideas.js?v=20261008170018';
-import { confetti, buzz, CARD_HUES } from './fx.js?v=20261008170018';
-import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261008170018';
-import { EXPLAIN } from './explain.js?v=20261008170018';
-import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261008170018';
+import { store, isLive, newId, newCode } from './store.js?v=20261008222357';
+import { balances, transfers, shekels } from './split.js?v=20261008222357';
+import { packs } from './ideas.js?v=20261008222357';
+import { confetti, buzz, CARD_HUES } from './fx.js?v=20261008222357';
+import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261008222357';
+import { EXPLAIN } from './explain.js?v=20261008222357';
+import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261008222357';
 
 // The always-on server (AI + notifications). Fire and forget: the site works the same without it.
 async function callApi(path, body) {
@@ -41,7 +41,7 @@ function uaShort() {
 }
 addEventListener('error', e => report(e.error || { message: e.message }, 'קוד'));
 addEventListener('unhandledrejection', e => report(e.reason, 'קוד'));
-import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261008170018';
+import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261008222357';
 
 const root = document.getElementById('app');
 // Same falsy-skipping as h(), so `cond && el` works at the top level too.
@@ -1845,6 +1845,30 @@ const mapsDir = (origin, dest, mode) => 'https://www.google.com/maps/dir/?api=1'
   + '&destination=' + encodeURIComponent(dest) + '&travelmode=' + mode;
 const wazeTo = q => 'https://waze.com/ul?q=' + encodeURIComponent(q) + '&navigate=yes';
 const openLink = url => open(url, '_blank', 'noopener');
+// Google Maps search centred on a spot (the api=1 search link can't take one)
+const mapsSearchAt = (q, pos) => 'https://www.google.com/maps/search/' + encodeURIComponent(q) + '/@' + pos.lat + ',' + pos.lng + ',14z';
+
+// 📍 Search and routes from where you are right now. The phone asks for the location when you tap;
+// it only goes into the Google Maps link, never to our server. Said no / no GPS → from the meeting point.
+let lastPos = null;
+function nearMe(makeUrl) {
+  const t0 = Date.now();
+  // phones block a new tab opened long after the tap (the permission question can take a while): then one more tap
+  const go = url => Date.now() - t0 < 4000 ? openLink(url) : openSheet('מפות', close => [
+    h('div', { style: 'font-size:44px' }, '📍'),
+    h('h3', { style: 'margin:6px 0 14px' }, 'מצאתי איפה אתה'),
+    h('button', { class: 'btn wide', onclick: () => { close(); openLink(url); } }, 'לפתוח במפות'),
+    h('button', { class: 'linkbtn', onclick: close }, 'סגור'),
+  ]);
+  if (lastPos && Date.now() - lastPos.at < 10 * 60e3) return openLink(makeUrl(lastPos));
+  if (!navigator.geolocation) return openLink(makeUrl(null));
+  toast('📍 מחפש איפה אתה...');
+  navigator.geolocation.getCurrentPosition(
+    p => { lastPos = { lat: +p.coords.latitude.toFixed(4), lng: +p.coords.longitude.toFixed(4), at: Date.now() }; go(makeUrl(lastPos)); },
+    () => { toast((state?.info?.meet ? 'בלי מיקום, מחפש ליד נקודת המפגש' : 'בלי מיקום, מחפש לפי האזור')); go(makeUrl(null)); },
+    { timeout: 10000, maximumAge: 5 * 60e3 },
+  );
+}
 
 // the day most of the group can ("YYYY-MM-DD"), or null
 function bestIso() {
@@ -1890,7 +1914,8 @@ function planPanel(me, what) {
   meet.onkeydown = e => { if (e.key === 'Enter') saveMeet(); };
 
   const area = info.meet || regionName[info.region] || '';
-  const dest = (base.search || what.text) + (area ? ` ליד ${area}` : ''); // "near the meeting point" lands on the closest one
+  const place = base.search || what.text;
+  const dest = place + (area ? ` ליד ${area}` : ''); // "near the meeting point" lands on the closest one
   const day = bestDay();
 
   // the timeline, counted back from when you want to be there
@@ -1953,12 +1978,17 @@ function planPanel(me, what) {
     base.trip && mode === 'car' && ridesPanel(me),
 
     h('div', { class: 'plan-btns' },
-      base.search && h('button', { class: 'glassbtn wide', onclick: () => openLink(mapsSearch(dest)) },
-        `🔎 ${base.search} באזור`),
+      base.search && h('button', {
+        class: 'glassbtn wide', onclick: () => nearMe(pos => pos ? mapsSearchAt(base.search, pos) : mapsSearch(dest)),
+      }, `🔎 ${base.search} לידי`),
       base.trip && (mode === 'bus'
-        ? h('button', { class: 'btn wide', onclick: () => openLink(mapsDir(info.meet, dest, 'transit')) }, '🚌 מסלול בתחבורה ציבורית')
+        ? h('button', {
+            class: 'btn wide', onclick: () => nearMe(pos => pos ? mapsDir(pos.lat + ',' + pos.lng, place, 'transit') : mapsDir(info.meet, dest, 'transit')),
+          }, '🚌 מסלול בתחבורה ציבורית')
         : [
-            h('button', { class: 'btn wide', onclick: () => openLink(mapsDir(info.meet, dest, 'driving')) }, '🚗 מסלול בגוגל מפות'),
+            h('button', {
+              class: 'btn wide', onclick: () => nearMe(pos => pos ? mapsDir(pos.lat + ',' + pos.lng, place, 'driving') : mapsDir(info.meet, dest, 'driving')),
+            }, '🚗 מסלול בגוגל מפות'),
             h('button', { class: 'glassbtn wide', onclick: () => openLink(wazeTo(dest)) }, '🧭 לפתוח בוויז'),
           ]),
       h('button', {

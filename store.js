@@ -27,7 +27,7 @@
 // A group watcher gets: {group, round, here, profiles, hidden, options, votes, when, chat, expenses, settlements, budget, kitty, info, plan, bring, rides, mycards, pollvotes, reacts, aichat}
 const NAMED = ['here', 'votes', 'when', 'profiles', 'bring', 'rides']; // docs keyed by a member's name
 
-import { firebaseConfig } from './firebase-config.js?v=20261008170018';
+import { firebaseConfig } from './firebase-config.js?v=20261008222357';
 
 export const isLive = !!(firebaseConfig && firebaseConfig.projectId);
 
