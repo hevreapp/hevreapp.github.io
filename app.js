@@ -1,10 +1,10 @@
-import { store, isLive, newId, newCode } from './store.js?v=20261008151206';
-import { balances, transfers, shekels } from './split.js?v=20261008151206';
-import { packs } from './ideas.js?v=20261008151206';
-import { confetti, buzz, CARD_HUES } from './fx.js?v=20261008151206';
-import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261008151206';
-import { EXPLAIN } from './explain.js?v=20261008151206';
-import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261008151206';
+import { store, isLive, newId, newCode } from './store.js?v=20261008170018';
+import { balances, transfers, shekels } from './split.js?v=20261008170018';
+import { packs } from './ideas.js?v=20261008170018';
+import { confetti, buzz, CARD_HUES } from './fx.js?v=20261008170018';
+import { REGIONS, regionName, planFor, addMin } from './plan-data.js?v=20261008170018';
+import { EXPLAIN } from './explain.js?v=20261008170018';
+import { API, VAPID_KEY, SITE_ADMINS } from './api-config.js?v=20261008170018';
 
 // The always-on server (AI + notifications). Fire and forget: the site works the same without it.
 async function callApi(path, body) {
@@ -16,7 +16,32 @@ async function callApi(path, body) {
     return r.ok ? r.json() : null;
   } catch { return null; }
 }
-import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261008151206';
+
+// Something failed on this phone: tell the server what and where (never what anyone wrote),
+// so it shows on the 📊 page before friends start complaining.
+const APP_VER = new URL(import.meta.url).searchParams.get('v') || '';
+const reported = new Set();
+function report(e, where) {
+  try {
+    const code = String(e?.code || e?.name || '').slice(0, 60);
+    const msg = String(e?.message || e || '').slice(0, 200);
+    const key = where + '|' + code + '|' + msg;
+    if (reported.has(key) || reported.size >= 20) return;
+    reported.add(key);
+    const at = (String(e?.stack || '').split('\n').find(l => /\.js/.test(l)) || '').trim().replace(/\?v=\d+/g, '').slice(0, 160);
+    callApi('/report', { where, code, msg, at, ver: APP_VER, ua: uaShort() });
+  } catch {}
+}
+function uaShort() {
+  const ua = navigator.userAgent;
+  const os = /iPhone|iPad|iPod/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android' : 'מחשב';
+  const br = /SamsungBrowser/.test(ua) ? 'Samsung' : /FBAN|FBAV|Instagram|WhatsApp/.test(ua) ? 'בתוך אפליקציה'
+    : /CriOS|Chrome/.test(ua) ? 'Chrome' : /Firefox|FxiOS/.test(ua) ? 'Firefox' : /Safari/.test(ua) ? 'Safari' : 'אחר';
+  return os + ' ' + br + (matchMedia('(display-mode: standalone)').matches ? ' · מותקן' : '');
+}
+addEventListener('error', e => report(e.error || { message: e.message }, 'קוד'));
+addEventListener('unhandledrejection', e => report(e.reason, 'קוד'));
+import { TASTES, LIMITS, PRICES, BUDGETS, ANY_BUDGET, tasteLabel, limitLabel, tagsOf, priceOf, ageCheck } from './tags.js?v=20261008170018';
 
 const root = document.getElementById('app');
 // Same falsy-skipping as h(), so `cond && el` works at the top level too.
@@ -175,7 +200,7 @@ function renderSignIn() {
     logo.innerHTML = '<svg viewBox="0 0 48 48" width="22" height="22"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
     go.onclick = async () => {
       go.disabled = true;
-      try { await store.signIn(); } catch { err.textContent = 'הכניסה נתקעה תנסה שוב'; }
+      try { await store.signIn(); } catch (e) { report(e, 'כניסה'); err.textContent = 'הכניסה נתקעה תנסה שוב'; }
       go.disabled = false;
     };
     return app.replaceChildren(hero,
@@ -222,7 +247,7 @@ function renderName() {
     const fresh = hasName ? {} : { likes: [], dislikes: [], limits: [], note: '', share: 'group', hidden: {} };
     // age: null drops the number saved by the version before birth dates
     try { await store.saveUser(user.uid, { ...fresh, name: n, born: a, age: null, ts: Date.now() }); }
-    catch { err.textContent = 'משהו נתקע בשמירה, תנסה שוב עוד רגע'; }
+    catch (e) { report(e, 'שם ותאריך'); err.textContent = 'משהו נתקע בשמירה, תנסה שוב עוד רגע'; }
   };
   name.onkeydown = age.onkeydown = e => { if (e.key === 'Enter') go(); };
   app.replaceChildren(
@@ -259,7 +284,8 @@ function renderHome() {
       ls.set('hevre:owner:' + id, true); // this phone runs the lobby
       location.hash = 'g=' + id;
       setTimeout(() => syncProfile(), 300);
-    } catch {
+    } catch (e) {
+      report(e, 'פתיחת קבוצה');
       err.textContent = 'משהו נתקע תנסה שוב';
       go.disabled = false;
     }
@@ -299,11 +325,14 @@ function renderHome() {
             }, g.owner === user.uid ? '🗑️' : '🚪'),
           );
         }))
-      : h('div', { class: 'done' }, h('div', { class: 'em' }, '👥'), h('h3', null, 'עוד אין לך קבוצות'), h('p', null, 'תפתח אחת או תצטרף עם קוד מחבר')),
+      : h('div', { class: 'done' }, h('div', { class: 'em' }, '👥'), h('h3', null, 'עוד אין לך קבוצות'), h('p', null, 'תפתח אחת או תצטרף עם קוד מחבר'),
+          isLive && h('button', { class: 'glassbtn', style: 'margin-top:12px', onclick: startDemo }, '🧪 לנסות בלי חברים')),
     h('div', { class: 'panel' },
       h('h3', null, '✨ קבוצה חדשה'),
       h('div', { class: 'row' }, name, go),
       err,
+      isLive && myGroups.length > 0 && !myGroups.some(g => g.demo)
+        && h('button', { class: 'linkbtn', onclick: startDemo }, '🧪 או לנסות קודם בקבוצת ניסיון'),
     ),
     h('div', { class: 'panel' },
       h('h3', null, '🔑 יש לך קוד?'),
@@ -338,13 +367,13 @@ async function removeGroup(g) {
 }
 async function leave(g) {
   try { await store.leaveGroup(g.gid, user.uid, g.people[user.uid], userDoc?.hidden?.[g.gid]); toast('יצאת מהקבוצה'); }
-  catch { toast('משהו נתקע, תנסה שוב'); }
+  catch (e) { report(e, 'יציאה מקבוצה'); toast('משהו נתקע, תנסה שוב'); }
 }
 async function deleteForAll(g) {
   if (!confirm(`למחוק את "${g.name}" לכולם?
 הצ'אט, הקלפים, ההוצאות והקופה יימחקו ואי אפשר להחזיר`)) return;
   try { await store.deleteGroup(g.gid, g.code); toast('הקבוצה נמחקה'); }
-  catch { toast('משהו נתקע, תנסה שוב'); }
+  catch (e) { report(e, 'מחיקת קבוצה'); toast('משהו נתקע, תנסה שוב'); }
 }
 
 // Pick who gets the crown. then() runs after the handover (e.g. leaving).
@@ -360,7 +389,7 @@ function pickAdmin(g, then) {
         if (!confirm(`להעביר את הניהול ל${n}?`)) return;
         close();
         try { await store.setOwner(g.gid, u); toast(`👑 ${n} המנהל עכשיו`); if (then) await then(); }
-        catch { toast('משהו נתקע, תנסה שוב'); }
+        catch (e) { report(e, 'העברת ניהול'); toast('משהו נתקע, תנסה שוב'); }
       },
     }, g.people[u]))),
     h('button', { class: 'linkbtn', onclick: close }, 'ביטול'),
@@ -399,8 +428,129 @@ async function deleteAccount() {
     toast('החשבון נמחק. להתראות 👋');
   } catch (e) {
     console.error('delete account', e);
+    report(e, 'מחיקת חשבון');
     toast('משהו נתקע באמצע, תנסה שוב');
   }
+}
+
+// A practice group with made-up friends who already swiped (the server builds it).
+let demoBusy = false;
+async function startDemo() {
+  const have = myGroups.find(g => g.demo);
+  if (have) { location.hash = 'g=' + have.gid; return; }
+  if (demoBusy) return;
+  demoBusy = true;
+  toast('🧪 מכין לך קבוצת ניסיון...');
+  const r = await callApi('/demo', {});
+  demoBusy = false;
+  if (!r?.gid) return toast('משהו נתקע, תנסה שוב');
+  tab = 'decide'; ls.set('hevre:tab', 'decide');
+  location.hash = 'g=' + r.gid;
+}
+async function endDemo(g) {
+  if (!confirm('למחוק את קבוצת הניסיון?')) return;
+  const id = gid;
+  location.hash = '';
+  try { await store.deleteGroup(id, g.code); toast('נמחקה. עכשיו תפתח קבוצה אמיתית ותזמין את החבר\'ה 🤙'); }
+  catch (e) { report(e, 'מחיקת קבוצת ניסיון'); toast('משהו נתקע, תנסה שוב'); }
+}
+
+// "YYYY-MM-DD" + "HH:MM" on an Israeli clock → the real moment (summer/winter time included)
+function ilTime(iso, hhmm) {
+  const [y, mo, d] = iso.split('-').map(Number), [hr, mi] = hhmm.split(':').map(Number);
+  const guess = Date.UTC(y, mo - 1, d, hr, mi);
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jerusalem', hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric',
+  }).formatToParts(new Date(guess)).map(x => [x.type, x.value]));
+  const shown = Date.UTC(+p.year, p.month - 1, +p.day, +p.hour, +p.minute);
+  return new Date(guess - (shown - guess));
+}
+const calStamp = d => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''); // 20261010T143000Z
+
+// 📅 the outing into the phone's calendar: Google Calendar, or an .ics file (iPhone and the rest)
+function calendarSheet(ev) {
+  const gcal = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+    + '&text=' + encodeURIComponent(ev.title) + '&dates=' + calStamp(ev.start) + '/' + calStamp(ev.end)
+    + '&details=' + encodeURIComponent(ev.details) + '&location=' + encodeURIComponent(ev.location) + '&ctz=Asia/Jerusalem';
+  openSheet('להוסיף ליומן', close => [
+    h('div', { style: 'font-size:44px' }, '📅'),
+    h('h3', { style: 'margin:6px 0 4px' }, ev.title),
+    h('p', { class: 'muted', style: 'margin:0 0 14px' }, ev.when),
+    h('button', { class: 'btn wide', onclick: () => { close(); openLink(gcal); } }, '📅 יומן גוגל'),
+    h('button', { class: 'glassbtn wide', onclick: () => { close(); downloadIcs(ev); } }, '🍏 אייפון או יומן אחר'),
+    h('button', { class: 'linkbtn', onclick: close }, 'סגור'),
+  ]);
+}
+function downloadIcs(ev) {
+  const esc = t => String(t).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+  // lines longer than 75 bytes get folded, as calendars expect
+  const fold = line => {
+    const out = []; let cur = '', bytes = 0;
+    for (const ch of line) {
+      const b = new TextEncoder().encode(ch).length;
+      if (bytes + b > 73) { out.push(cur); cur = ' '; bytes = 1; }
+      cur += ch; bytes += b;
+    }
+    return out.concat(cur).join('\r\n');
+  };
+  const ics = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//hevre//he', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    'UID:' + ev.uid + '@hevreapp.github.io',
+    'DTSTAMP:' + calStamp(new Date()),
+    'DTSTART:' + calStamp(ev.start), 'DTEND:' + calStamp(ev.end),
+    'SUMMARY:' + esc(ev.title), 'LOCATION:' + esc(ev.location), 'DESCRIPTION:' + esc(ev.details),
+    'BEGIN:VALARM', 'TRIGGER:-PT2H', 'ACTION:DISPLAY', 'DESCRIPTION:' + esc(ev.title), 'END:VALARM',
+    'END:VEVENT', 'END:VCALENDAR',
+  ].map(fold).join('\r\n');
+  const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+  const a = h('a', { href: url, download: 'hevre.ics' });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+// 🧾 a receipt photo → the AI fills in amount, what and category (the photo isn't kept anywhere)
+let receiptBusy = false;
+function pickReceipt() {
+  const inp = h('input', { type: 'file', accept: 'image/*' });
+  inp.onchange = () => { if (inp.files[0]) readReceipt(inp.files[0]); };
+  inp.click();
+}
+async function readReceipt(file) {
+  if (receiptBusy) return;
+  receiptBusy = true;
+  toast('🧾 קורא את הקבלה...');
+  try {
+    const image = await shrinkImage(file, 1280);
+    const r = await callApi('/receipt', { gid, image });
+    if (!r) return toast('משהו נתקע, תנסה שוב');
+    if (r.error) return toast(r.error);
+    draft.amount = String(r.amount);
+    if (r.desc) draft.desc = r.desc;
+    if (CATS.some(([c]) => c === r.cat)) draft.cat = r.cat;
+    buzz(20);
+    render();
+    toast(`🧾 ${r.amount}₪${r.desc ? ' על ' + r.desc : ''}. תבדוק שזה נכון ותלחץ תוסיף`);
+  } catch (e) { report(e, 'קבלה'); toast('לא הצלחתי לקרוא את התמונה'); }
+  finally { receiptBusy = false; }
+}
+// A phone photo is 3-12MB; 1280px is plenty to read a receipt
+async function shrinkImage(file, max) {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.82).split(',')[1];
+}
+
+// 💸 "remind them": a push from the server (it checks the debt itself); WhatsApp if they have no notifications
+async function remindDebt(t) {
+  buzz(10);
+  const r = await callApi('/notify', { gid, type: 'debt', from: t.from });
+  if (r?.sent) return toast(`🔔 שלחתי ל${t.from} תזכורת`);
+  if (r?.throttled) return toast(`כבר הזכירו ל${t.from} בשעה האחרונה`);
+  share(`${t.from}, תזכורת קטנה מ"${state.group.name}" 💸 נשאר לך להעביר ${shekels(t.amount)} ל${t.to}`, groupUrl(gid));
 }
 
 // 🔔/🔕 in a group's header: notifications from this group on or off, for all my phones
@@ -411,7 +561,7 @@ async function toggleMute(id) {
     await store.muteGroup(user.uid, id, on);
     buzz(10);
     toast(on ? '🔕 הקבוצה הזאת בשקט, לא יגיעו ממנה התראות' : '🔔 ההתראות מהקבוצה הזאת חזרו');
-  } catch { toast('משהו נתקע, תנסה שוב'); }
+  } catch (e) { report(e, 'השתקה'); toast('משהו נתקע, תנסה שוב'); }
 }
 
 /* ---------- stats: only for whoever runs the site (the server checks) ---------- */
@@ -472,7 +622,22 @@ async function renderStats() {
         tile('💬', today.chats, 'הודעות'),
         tile('🤖', (today.ai || 0) + (today.suggest || 0) + (today.summary || 0), 'שימושים ב-AI'),
         tile('🔔', today.pushes, 'התראות'),
+        tile('🧾', today.receipts, 'קבלות'),
+        tile('💸', today.reminders, 'תזכורות חוב'),
+        tile('🧪', today.demos, 'קבוצות ניסיון'),
+        tile('🚨', today.errors, 'תקלות'),
       ),
+    ),
+    h('div', { class: 'panel' },
+      h('h3', null, '🚨 תקלות אחרונות'),
+      s.errors?.length
+        ? h('div', { class: 'errs' }, s.errors.map(e => h('div', { class: 'err-row' },
+            h('b', null, `${e.where || '?'} · ${e.code || (e.msg || '').slice(0, 50)}`),
+            h('small', null, `${new Date(e.ts).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })} · ${e.ua} · משתמש ${e.who}`),
+            e.msg && h('small', { class: 'mono' }, e.msg),
+            e.at && h('small', { class: 'mono' }, e.at),
+          )))
+        : h('p', { class: 'muted', style: 'margin:0' }, 'אין תקלות 🎉'),
     ),
     bars('🔥 קבוצות פעילות, 14 ימים', 'groups'),
     bars('💬 הודעות ביום', 'chats'),
@@ -510,7 +675,7 @@ function renderJoin() {
     let n = myName(), i = 2;
     while (g.members.includes(n)) n = `${myName()} ${i++}`;
     try { await store.joinGroup(gid, user.uid, n); buzz(30); setTimeout(() => syncProfile(), 300); }
-    catch { err.textContent = 'משהו נתקע תנסה שוב'; go.disabled = false; }
+    catch (e) { report(e, 'הצטרפות'); err.textContent = 'משהו נתקע תנסה שוב'; go.disabled = false; }
   };
   app.replaceChildren(
     h('div', { class: 'hero' },
@@ -551,13 +716,18 @@ function renderGroup(me) {
           class: 'code', onclick: async () => { try { await navigator.clipboard.writeText(g.code); toast('הקוד הועתק'); } catch {} },
         }, g.code)),
       ),
-      isLive && h('button', {
+      isLive && !g.demo && h('button', {
         class: 'glassbtn bell', onclick: () => toggleMute(gid),
         'aria-label': isMuted(gid) ? 'להחזיר התראות מהקבוצה' : 'להשתיק את הקבוצה', title: isMuted(gid) ? 'הקבוצה בשקט' : 'להשתיק את הקבוצה',
       }, isMuted(gid) ? '🔕' : '🔔'),
-      h('button', { class: 'glassbtn', onclick: () => inviteSheet(g) }, '📤 הזמן'),
+      !g.demo && h('button', { class: 'glassbtn', onclick: () => inviteSheet(g) }, '📤 הזמן'),
     ),
     !isLive && h('div', { class: 'banner' }, 'מצב בדיקה: הכל נשמר רק בדפדפן הזה'),
+    g.demo && h('div', { class: 'demobar' },
+      h('b', null, '🧪 קבוצת ניסיון'),
+      h('span', null, 'החברים פה מדומים וכבר עשו סוויפ. תעשה גם אתה ותראה מה קורה 😉'),
+      h('button', { class: 'linkbtn', onclick: () => endDemo(g) }, 'סיימתי, למחוק אותה'),
+    ),
     slideTabs(h('div', { class: 'tabs', 'data-on': shownTab || tab },
       h('span', { class: 'ind' }),
       h('button', { class: tab === 'decide' ? 'on' : '', onclick: () => setTab('decide') }, '🃏', h('span', null, 'מה עושים')),
@@ -1269,11 +1439,11 @@ function peopleTab(me) {
     if (!confirm(`להוציא את ${m} מהקבוצה?
 אי אפשר יהיה לחזור עם הקוד, עד שתחזיר מהרשימה של מי שהוצא`)) return;
     try { await store.kick(gid, uidOf(m), m); buzz(30); toast(`הוצאת את ${m}`); }
-    catch { toast('משהו נתקע, תנסה שוב'); }
+    catch (e) { report(e, 'הוצאת חבר'); toast('משהו נתקע, תנסה שוב'); }
   };
   const unban = async (u, n) => {
     try { await store.unban(gid, u); toast(`${n} יכול לחזור עם הקוד`); }
-    catch { toast('משהו נתקע, תנסה שוב'); }
+    catch (e) { report(e, 'החזרת חבר'); toast('משהו נתקע, תנסה שוב'); }
   };
   const banned = Object.entries(g.banned || {});
 
@@ -1450,6 +1620,7 @@ async function turnOnPush() {
     // the exact code tells us which step failed (service worker, token, or saving it)
     toast('לא הצליח להדליק התראות: ' + String(e?.code || e?.message || e).slice(0, 80));
     console.error('push', e);
+    report(e, 'התראות');
   }
 }
 function pushButton() {
@@ -1675,13 +1846,18 @@ const mapsDir = (origin, dest, mode) => 'https://www.google.com/maps/dir/?api=1'
 const wazeTo = q => 'https://waze.com/ul?q=' + encodeURIComponent(q) + '&navigate=yes';
 const openLink = url => open(url, '_blank', 'noopener');
 
-function bestDay() {
+// the day most of the group can ("YYYY-MM-DD"), or null
+function bestIso() {
   const when = state.when || {};
   const counts = {};
   for (const m of state.group.members) for (const d of when[m]?.days || []) counts[d] = (counts[d] || 0) + 1;
   const best = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
-  if (!best) return null;
-  const d = new Date(best[0] + 'T12:00');
+  return best ? best[0] : null;
+}
+function bestDay() {
+  const iso = bestIso();
+  if (!iso) return null;
+  const d = new Date(iso + 'T12:00');
   return `יום ${DAYS[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}`;
 }
 
@@ -1794,6 +1970,27 @@ function planPanel(me, what) {
           toast('נשלח לצ\'אט 💬');
         },
       }, '💬 שלח את התוכנית לצ\'אט'),
+      h('button', {
+        class: 'glassbtn wide',
+        onclick: () => {
+          const iso = bestIso();
+          if (!iso) {
+            toast('קודם תסמנו ב"מתי?" איזה יום מתאים');
+            return document.getElementById('when')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+          const [from, to] = [steps[0][2], steps.at(-1)[2]];
+          const start = ilTime(iso, from);
+          let end = ilTime(iso, to);
+          if (end <= start) end = new Date(end.getTime() + 864e5); // ends after midnight
+          calendarSheet({
+            uid: gid + '-' + what.id, start, end,
+            title: `${what.emoji || '✨'} ${what.text} עם ${state.group.name}`,
+            when: `${day}, ${from} עד ${to}`,
+            location: base.trip ? (info.meet || dest) : '',
+            details: planText() + '\n\n' + groupUrl(gid),
+          });
+        },
+      }, '📅 להוסיף ליומן'),
     ),
   );
 }
@@ -2109,6 +2306,9 @@ function moneyTab(me) {
       tr.length
         ? tr.map(t => h('div', { class: 'tr' },
             h('div', { class: 't' }, t.from, ' ← ', h('b', null, shekels(t.amount)), ' ← ', t.to),
+            isLive && t.from !== me && h('button', {
+              class: 'remindbtn', 'aria-label': 'להזכיר ל' + t.from + ' שהוא חייב', title: 'להזכיר', onclick: () => remindDebt(t),
+            }, '🔔'),
             h('button', {
               class: 'btn small',
               onclick: async () => {
@@ -2124,6 +2324,7 @@ function moneyTab(me) {
     ),
     h('div', { class: 'panel' },
       h('h3', null, '🧾 הוצאה חדשה'),
+      isLive && h('button', { class: 'glassbtn wide', onclick: pickReceipt }, '📷 לצלם קבלה, וה-AI ימלא'),
       h('label', null, 'מי שילם?'), payer,
       h('label', null, 'כמה ₪?'), amount,
       h('label', null, 'על מה?'), desc,

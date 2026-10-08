@@ -947,6 +947,15 @@
   .bar { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
   .bar i { display: block; width: 100%; min-height: 2px; border-radius: 6px 6px 2px 2px; background: var(--accent); }
   .bar small { font-size: 9px; color: var(--muted); }
+  .demobar { display: grid; gap: 4px; margin-bottom: 14px; padding: 12px 14px; border-radius: 16px; background: var(--accent-soft); color: var(--ink); font-size: 14px; }
+  .demobar b { color: var(--accent); }
+  .demobar .linkbtn { margin: 2px 0 0; justify-self: start; }
+  .remindbtn { width: 38px; height: 38px; flex: none; border-radius: 12px; font-size: 16px; background: var(--surface); border: 1px solid var(--line); }
+  .remindbtn:active { transform: scale(.9); }
+  .errs { display: grid; gap: 8px; }
+  .err-row { display: grid; gap: 2px; padding: 10px 12px; border-radius: 14px; background: var(--soft); font-size: 13px; }
+  .err-row small { color: var(--muted); font-size: 11px; }
+  .err-row .mono { font-family: ui-monospace, Consolas, monospace; direction: ltr; text-align: left; word-break: break-all; }
   .pushnudge { display: block; width: 100%; margin-bottom: 10px; padding: 10px 14px; border-radius: 14px; font-weight: 700; font-size: 14px;
     background: var(--accent-soft); color: var(--accent); }
   .aihello { align-self: stretch; display: grid; gap: 4px; text-align: center; padding: 14px; margin-bottom: 8px; border-radius: 18px; background: var(--accent-soft); }
@@ -1018,6 +1027,6 @@
 <div id="app"></div>
 <canvas id="confetti"></canvas>
 <div class="toast" id="toast"></div>
-<script type="module" src="app.js?v=20261008151206"></script>
+<script type="module" src="app.js?v=20261008170018"></script>
 </body>
 </html>
